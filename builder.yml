@@ -9,17 +9,17 @@
 # Upstream OpenWrt source (the tree that will be checked out and built).
 upstream:
   repo: qosmio/openwrt-ipq
-  branch: main-nss
+  branch: 25.12-nss
 
 # NSS packages source. Tracked separately so we can detect package-only updates.
 nss_packages:
   repo: qosmio/nss-packages
-  branch: NSS-12.5-K6.x
+  branch: NSS-12.5-K6.x-wwan
 
 # Device id. Must match a directory under devices/<id>/ containing
 #   - config        (the OpenWrt .config file)
 #   - files/        (overlay rootfs, optional)
-device: xiaomi_ax3600
+device: arcadyan_aw1000
 
 # Custom feeds appended to feeds.conf during build. Order matters.
 # Each entry becomes:  src-git <name> <url>
@@ -28,9 +28,17 @@ feeds:
     url: https://github.com/qosmio/packages-extra
   - name: sqm_nss
     url: https://github.com/JuliusBairaktaris/sqm-scripts-nss
+  - name: iceg_modemdata
+    url: https://github.com/4IceG/luci-app-modemdata
+  - name: iceg_modemband
+    url: https://github.com/4IceG/luci-app-modemband
+  - name: iceg_sms_tool
+    url: https://github.com/4IceG/luci-app-sms-tool-js
+  - name: iceg_atinout
+    url: https://github.com/4IceG/luci-app-atinout
 
 # Release publishing settings.
 release:
-  prefix: main-nss            # tag = <prefix>-<UTC timestamp>-<run id>
-  keep: 2                     # number of newest releases to retain (older ones are deleted)
-  artifact_retention_days: 7  # how long the GitHub Actions artifact (separate from the release) is kept
+  prefix: aw1000-nss             # tag = <prefix>-<UTC timestamp>-<run id>
+  keep: 3                        # number of newest releases to retain (older ones are deleted)
+  artifact_retention_days: 7     # how long the GitHub Actions artifact (separate from the release) is kept
