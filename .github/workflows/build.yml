@@ -7,13 +7,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - builder.yml
-      - 'devices/**'
-      - 'common/**'
-      - 'patches/**'
-      - 'scripts/**'
-      - '.github/workflows/build.yml'
   schedule:
     - cron: "0 */2 * * *"
 
@@ -72,7 +65,7 @@ jobs:
           latest_release_body=$(gh release view --repo "${GITHUB_REPOSITORY}" --json body --jq .body 2>/dev/null || echo "")
 
           build_required=true
-          if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]] \
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]] \
              && [[ "$latest_release_body" == *"$main_sha"* ]] \
              && [[ "$latest_release_body" == *"$nss_sha"* ]]; then
             build_required=false
@@ -83,13 +76,13 @@ jobs:
             echo "- upstream: \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` -> \`${main_sha}\`"
             echo "- nss:      \`${NSS_REPO}@${NSS_BRANCH}\` -> \`${nss_sha}\`"
             echo "- build_required: **${build_required}**"
-          } >>"$GITHUB_STEP_SUMMARY"
+          } >>"${GITHUB_STEP_SUMMARY}"
 
           {
             echo "build_required=$build_required"
             echo "main_sha=$main_sha"
             echo "nss_sha=$nss_sha"
-          } >>"$GITHUB_OUTPUT"
+          } >>"${GITHUB_OUTPUT}"
 
   build:
     name: Build firmware
@@ -149,7 +142,7 @@ jobs:
             echo "LC_ALL=C"
             echo "KBUILD_BUILD_USER=builder"
             echo "KBUILD_BUILD_HOST=github"
-          } >>"$GITHUB_ENV"
+          } >>"${GITHUB_ENV}"
 
       - name: Download sources
         working-directory: openwrt
@@ -185,7 +178,7 @@ jobs:
           date=$(date -u +%F)
           timestamp=$(date -u +%Y%m%dT%H%M%SZ)
           tag_name="${RELEASE_PREFIX}-${timestamp}-${GITHUB_RUN_ID}"
-          echo "release_tag=$tag_name" >>"$GITHUB_OUTPUT"
+          echo "release_tag=$tag_name" >>"${GITHUB_OUTPUT}"
 
           {
             echo "## OpenWrt Build"
@@ -207,7 +200,7 @@ jobs:
             echo "## Release"
             echo "- tag: \`${tag_name}\`"
             echo "- assets: ${#assets[@]}"
-          } >>"$GITHUB_STEP_SUMMARY"
+          } >>"${GITHUB_STEP_SUMMARY}"
 
   prune:
     name: Prune old releases
