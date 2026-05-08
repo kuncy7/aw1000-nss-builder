@@ -109,6 +109,7 @@ jobs:
       RELEASE_PREFIX: ${{ needs.config.outputs.release_prefix }}
       ARTIFACT_RETENTION_DAYS: ${{ needs.config.outputs.artifact_retention_days }}
       FEEDS_LINES: ${{ needs.config.outputs.feeds_lines }}
+      NSS_BRANCH: ${{ needs.config.outputs.nss_branch }}
     outputs:
       release_tag: ${{ steps.release.outputs.release_tag }}
     steps:

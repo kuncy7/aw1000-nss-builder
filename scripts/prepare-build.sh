@@ -44,6 +44,12 @@ fi
 # 2. Configure feeds.
 [[ -f feeds.conf ]] || cp feeds.conf.default feeds.conf
 
+# Override nss_packages branch from builder.yml (feeds.conf.default may have a different branch).
+if [[ -n "${NSS_BRANCH:-}" ]]; then
+  log::info "Overriding nss_packages branch to: $NSS_BRANCH"
+  sed -i "s|nss-packages\.git;[^ ]*|nss-packages.git;${NSS_BRANCH}|" feeds.conf
+fi
+
 log::info "Appending custom feeds:"
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
@@ -51,18 +57,20 @@ while IFS= read -r line; do
   echo "$line" >>feeds.conf
 done <<<"$FEEDS_LINES"
 
-# Update + install each custom feed individually so failures are obvious,
-# then update + install everything else.
+# Update ALL feeds first so standard feeds (luci, packages, …) are available
+# before custom feeds are indexed — custom LuCI packages include feeds/luci/luci.mk.
+log::info "Updating all feeds"
+./scripts/feeds update -a
+
+# Install each custom feed individually so failures are obvious.
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   feed_name="$(awk '{print $2}' <<<"$line")"
-  log::info "Updating feed: $feed_name"
-  ./scripts/feeds update "$feed_name"
+  log::info "Installing packages from feed: $feed_name"
   ./scripts/feeds install -a -p "$feed_name"
 done <<<"$FEEDS_LINES"
 
-log::info "Updating + installing all feeds"
-./scripts/feeds update -a
+log::info "Installing all remaining packages"
 ./scripts/feeds install -a
 
 # 3. Drop in device .config and resolve.
