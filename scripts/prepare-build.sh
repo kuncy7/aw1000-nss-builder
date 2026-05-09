@@ -73,6 +73,15 @@ done <<<"$FEEDS_LINES"
 log::info "Installing all remaining packages"
 ./scripts/feeds install -a
 
+# 2a. Per-package post-install fixes for upstream incompatibilities.
+# quectel-cm 1.6.5 ships CMakeLists.txt with cmake_minimum_required(VERSION <3.5),
+# which CMake 4.x rejects. The CMake error message itself suggests this flag.
+quectel_cm_mk="feeds/nss_packages/wwan/utils/quectel-cm/Makefile"
+if [[ -f "$quectel_cm_mk" ]] && ! grep -q CMAKE_POLICY_VERSION_MINIMUM "$quectel_cm_mk"; then
+  log::info "Patching $quectel_cm_mk for CMake 4.x compatibility"
+  printf '\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n' >>"$quectel_cm_mk"
+fi
+
 # 3. Drop in device .config and resolve.
 log::info "Loading device config: $DEVICE_DIR/config"
 cp "$BUILDER_REPO/$DEVICE_DIR/config" .config
