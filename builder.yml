@@ -48,6 +48,8 @@ feeds:
     url: https://github.com/gSpotx2f/luci-app-cpu-status
   - name: obsy_packages
     url: https://github.com/obsy/packages
+  - name: obsy_modemdata
+    url: https://github.com/obsy/modemdata
 
 # Release publishing settings.
 release:
