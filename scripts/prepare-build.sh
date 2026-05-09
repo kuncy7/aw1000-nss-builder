@@ -81,6 +81,7 @@ if [[ -f "$quectel_cm_mk" ]] && ! grep -q CMAKE_POLICY_VERSION_MINIMUM "$quectel
   log::info "Patching $quectel_cm_mk for CMake 4.x compatibility"
   # Must be inserted after 'include cmake.mk' but before 'BuildPackage' --
   # appending at EOF lands after BuildPackage and is ignored.
+  # shellcheck disable=SC2016  # $(INCLUDE_DIR) is a make variable, not shell
   sed -i '/^include $(INCLUDE_DIR)\/cmake\.mk$/a\\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5' "$quectel_cm_mk"
 fi
 
