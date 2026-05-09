@@ -36,6 +36,18 @@ feeds:
     url: https://github.com/4IceG/luci-app-sms-tool-js
   - name: iceg_atinout
     url: https://github.com/4IceG/luci-app-atinout
+  - name: modemfeed
+    url: https://github.com/koshev-msk/modemfeed.git
+  - name: iceg_3ginfo_lite
+    url: https://github.com/4IceG/luci-app-3ginfo-lite
+  - name: iceg_lite_watchdog
+    url: https://github.com/4IceG/luci-app-lite-watchdog
+  - name: gspot_cpu_perf
+    url: https://github.com/gSpotx2f/luci-app-cpu-perf
+  - name: gspot_cpu_status
+    url: https://github.com/gSpotx2f/luci-app-cpu-status
+  - name: obsy_packages
+    url: https://github.com/obsy/packages
 
 # Release publishing settings.
 release:

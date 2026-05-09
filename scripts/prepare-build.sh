@@ -79,7 +79,9 @@ log::info "Installing all remaining packages"
 quectel_cm_mk="feeds/nss_packages/wwan/utils/quectel-cm/Makefile"
 if [[ -f "$quectel_cm_mk" ]] && ! grep -q CMAKE_POLICY_VERSION_MINIMUM "$quectel_cm_mk"; then
   log::info "Patching $quectel_cm_mk for CMake 4.x compatibility"
-  printf '\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5\n' >>"$quectel_cm_mk"
+  # Must be inserted after 'include cmake.mk' but before 'BuildPackage' --
+  # appending at EOF lands after BuildPackage and is ignored.
+  sed -i '/^include $(INCLUDE_DIR)\/cmake\.mk$/a\\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5' "$quectel_cm_mk"
 fi
 
 # 3. Drop in device .config and resolve.
