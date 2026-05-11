@@ -85,6 +85,13 @@ if [[ -f "$quectel_cm_mk" ]] && ! grep -q CMAKE_POLICY_VERSION_MINIMUM "$quectel
   sed -i '/^include $(INCLUDE_DIR)\/cmake\.mk$/a\\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5' "$quectel_cm_mk"
 fi
 
+# Fix quectel.sh for ash compatibility (|| assignments were joined on one line).
+quectel_sh="feeds/nss_packages/wwan/utils/quectel-cm/files/quectel.sh"
+if [[ -f "$quectel_sh" ]]; then
+  log::info "Replacing $quectel_sh with ash-compatible version"
+  cp "$BUILDER_REPO/$DEVICE_DIR/quectel.sh" "$quectel_sh"
+fi
+
 # 3. Drop in device .config and resolve.
 log::info "Loading device config: $DEVICE_DIR/config"
 cp "$BUILDER_REPO/$DEVICE_DIR/config" .config

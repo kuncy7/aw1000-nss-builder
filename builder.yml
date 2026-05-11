@@ -37,7 +37,7 @@ feeds:
   - name: iceg_atinout
     url: https://github.com/4IceG/luci-app-atinout
   - name: modemfeed
-    url: https://github.com/koshev-msk/modemfeed.git
+    url: https://github.com/kuncy7/modemfeed.git
   - name: iceg_3ginfo_lite
     url: https://github.com/4IceG/luci-app-3ginfo-lite
   - name: iceg_lite_watchdog
