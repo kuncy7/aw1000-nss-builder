@@ -42,10 +42,8 @@ feeds:
     url: https://github.com/4IceG/luci-app-3ginfo-lite
   - name: iceg_lite_watchdog
     url: https://github.com/4IceG/luci-app-lite-watchdog
-  - name: gspot_cpu_perf
-    url: https://github.com/gSpotx2f/luci-app-cpu-perf
-  - name: gspot_cpu_status
-    url: https://github.com/gSpotx2f/luci-app-cpu-status
+  - name: gspot_cpu
+    url: https://github.com/kuncy7/luci-gspot-feeds
   - name: obsy_packages
     url: https://github.com/obsy/packages
   - name: obsy_modemdata
