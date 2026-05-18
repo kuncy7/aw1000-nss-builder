@@ -48,6 +48,8 @@ feeds:
     url: https://github.com/obsy/packages
   - name: obsy_modemdata
     url: https://github.com/obsy/modemdata
+  - name: obsy_modemband
+    url: https://github.com/obsy/modemband
 
 # Release publishing settings.
 release:
