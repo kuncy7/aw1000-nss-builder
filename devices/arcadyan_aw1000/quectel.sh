@@ -113,36 +113,46 @@ proto_quectel_setup() {
 		*) auth=0 ;;
 	esac
 
-	quectel-qmi-proxy &
+	# No quectel-qmi-proxy: single quectel-cm + qmap_mode=1 opens /dev/cdc-wdm0
+	# directly (QmiWwanCM.c: proxy only forced when qmap_mode>1). With the proxy
+	# running, quectel-cm bypasses it anyway and kill_brothers treats it as a
+	# competitor for the QMI device.
 
-	sleep 3
-	
 	if [ "$multiplexing" = 1 ]; then
 		[ -n "$pdnindex" ] || pdnindex="1"
 		[ -n "$pdnindexv6" ] || pdnindexv6="2"
 
 		if [ -n "$ipv4opt" ]; then
-			if [ -n "$username" ] &&[ -n "$password" ]; then
-				quectel-cm -i "$ifname" $ipv4opt -n $pdnindex -m 1 ${pincode:+-p $pincode} -s "$apn" "$username" "$password" "$auth" &
+			if [ -n "$username" ] && [ -n "$password" ]; then
+				quectel-cm -i "$ifname" "$ipv4opt" -n $pdnindex -m 1 ${pincode:+-p $pincode} -s "$apn" "$username" "$password" "$auth" &
 			else
-				quectel-cm -i "$ifname" $ipv4opt -n $pdnindex -m 1 ${pincode:+-p $pincode} -s "$apn" &
+				quectel-cm -i "$ifname" "$ipv4opt" -n $pdnindex -m 1 ${pincode:+-p $pincode} -s "$apn" &
 			fi
+			sleep 3
 		fi
+		# IPv6 mux index: when IPv6 is the only family, bind to the primary
+		# mux (wwan0_1, muxid 0x81 — the single channel qmi_wwan_q registers
+		# by default). A second mux (wwan0_2) only exists in true dual-stack,
+		# where IPv4 already took mux 1.
+		if [ -n "$ipv4opt" ]; then v6mux=2; else v6mux=1; fi
 		if [ -n "$ipv6opt" ]; then
 			if [ -n "$username" ] && [ -n "$password" ]; then
-				quectel-cm -i "$ifname" $ipv6opt -n $pdnindexv6 -m 2 ${pincode:+-p $pincode} -s "$apnv6" "$username" "$password" "$auth" &
+				quectel-cm -i "$ifname" "$ipv6opt" -n $pdnindexv6 -m $v6mux ${pincode:+-p $pincode} -s "${apnv6:-$apn}" "$username" "$password" "$auth" &
 			else
-				quectel-cm -i "$ifname" $ipv6opt -n $pdnindexv6 -m 2 ${pincode:+-p $pincode} -s "$apnv6" &
+				quectel-cm -i "$ifname" "$ipv6opt" -n $pdnindexv6 -m $v6mux ${pincode:+-p $pincode} -s "${apnv6:-$apn}" &
 			fi
 		fi
 	else
+		# $ipv4opt/$ipv6opt MUST stay unquoted: when one is empty (e.g.
+		# pdptype=ipv6 → ipv4opt=""), a quoted "" becomes a real empty
+		# argument and quectel-cm bails out printing its usage.
 		if [ -n "$username" ] && [ -n "$password" ]; then
 			quectel-cm -i "$ifname" $ipv4opt $ipv6opt ${pincode:+-p $pincode} -s "$apn" "$username" "$password" "$auth" &
 		else
 			quectel-cm -i "$ifname" $ipv4opt $ipv6opt ${pincode:+-p $pincode} -s "$apn" &
 		fi
 	fi
-	
+
 	sleep 5
 
 	ip link set "$ifname" up
@@ -217,7 +227,6 @@ proto_quectel_teardown() {
 	proto_init_update "*" 0
 	proto_send_update "$interface"
 	killall quectel-cm
-	killall quectel-qmi-proxy
 }
 
 [ -n "$INCLUDE_ONLY" ] || {
