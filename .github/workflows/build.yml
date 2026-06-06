@@ -71,8 +71,11 @@ jobs:
 
           latest_release_body=$(gh release view --repo "${GITHUB_REPOSITORY}" --json body --jq .body 2>/dev/null || echo "")
 
+          # Push means builder config/overlays/scripts changed → always rebuild.
+          # workflow_dispatch is an explicit request → always rebuild.
+          # Only a scheduled tick should dedup (skip when upstream is unchanged).
           build_required=true
-          if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]] \
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]] \
              && [[ "$latest_release_body" == *"$main_sha"* ]] \
              && [[ "$latest_release_body" == *"$nss_sha"* ]]; then
             build_required=false
