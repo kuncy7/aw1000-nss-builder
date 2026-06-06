@@ -14,11 +14,8 @@ on:
       - 'patches/**'
       - 'scripts/**'
       - '.github/workflows/build.yml'
-  # Temporarily disabled: upstream qosmio/openwrt-ipq@25.12-nss is broken —
-  # NSS ath11k patch 235-003 fails to apply on backports-6.18.26
-  # (https://github.com/qosmio/openwrt-ipq/issues/104). Re-enable once fixed.
-  # schedule:
-  #   - cron: "0 */8 * * *"
+  schedule:
+    - cron: "0 */8 * * *"
 
 concurrency:
   group: build-${{ github.ref }}
