@@ -7,8 +7,11 @@
 	mv /etc/ssh/moduli.safe /etc/ssh/moduli
 }
 
-# NOTE: /usr/sbin/nss-up is deliberately NOT called here. Per request, the NSS
-# data plane is armed manually after login (run `nss-up`). A reboot returns to
-# the plain host stack.
+# Arm the NSS data plane at boot (firmware, Wi-Fi offload, ECM, SQM). This is
+# the "no Ethernet" variant: if AW1000 Wi-Fi only comes up on the NSS/wifili
+# data path, running nss-up here makes the SSID appear without needing a cable.
+# Output is logged to /tmp so it can be inspected after login; nss-up has a
+# host-mode Wi-Fi fallback, and a reboot always returns to the plain host stack.
+/usr/sbin/nss-up >/tmp/nss-up.log 2>&1 || logger -t nss-up "NSS bring-up failed, see /tmp/nss-up.log (host stack still active)"
 
 exit 0
