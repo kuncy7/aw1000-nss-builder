@@ -1,0 +1,32 @@
+#!/bin/sh
+# TEST IMAGE ONLY: bring up an OPEN AP "OpenWRT" on every radio, bridged to lan,
+# so a laptop with no Ethernet port can reach the device over Wi-Fi.
+#
+# EDMA-NSS boots Wi-Fi in host mode (nss_offload=0), so this is an ordinary
+# host-mode AP. After /usr/sbin/nss-up runs, the radios move onto the NSS data
+# path (the SSID is re-created) — see that script.
+
+# Generate the board's default wireless config if the boot-time detect hasn't yet.
+[ -f /etc/config/wireless ] || wifi config
+
+. /lib/functions.sh
+
+enable_radio() {
+	uci -q set "wireless.$1.disabled=0"
+	uci -q set "wireless.$1.country=PL"
+}
+
+open_ap() {
+	uci -q set "wireless.$1.disabled=0"
+	uci -q set "wireless.$1.network=lan"
+	uci -q set "wireless.$1.mode=ap"
+	uci -q set "wireless.$1.ssid=OpenWRT"
+	uci -q set "wireless.$1.encryption=none"
+}
+
+config_load wireless
+config_foreach enable_radio wifi-device
+config_foreach open_ap wifi-iface
+
+uci commit wireless
+exit 0

@@ -1,0 +1,14 @@
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+# ssh moduli hardening (drop weak DH groups).
+[ -f /etc/ssh/moduli ] && {
+	awk '$5 >= 3071' /etc/ssh/moduli > /etc/ssh/moduli.safe
+	mv /etc/ssh/moduli.safe /etc/ssh/moduli
+}
+
+# NOTE: /usr/sbin/nss-up is deliberately NOT called here. Per request, the NSS
+# data plane is armed manually after login (run `nss-up`). A reboot returns to
+# the plain host stack.
+
+exit 0
