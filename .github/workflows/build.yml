@@ -58,6 +58,7 @@ jobs:
       UPSTREAM_BRANCH: ${{ needs.config.outputs.upstream_branch }}
       NSS_REPO: ${{ needs.config.outputs.nss_repo }}
       NSS_BRANCH: ${{ needs.config.outputs.nss_branch }}
+      RELEASE_PREFIX: ${{ needs.config.outputs.release_prefix }}
     outputs:
       build_required: ${{ steps.check.outputs.build_required }}
       main_sha: ${{ steps.check.outputs.main_sha }}
@@ -69,7 +70,14 @@ jobs:
           main_sha=$(gh api "repos/${UPSTREAM_REPO}/commits/${UPSTREAM_BRANCH}" --jq .sha)
           nss_sha=$(gh api "repos/${NSS_REPO}/commits/${NSS_BRANCH}" --jq .sha)
 
-          latest_release_body=$(gh release view --repo "${GITHUB_REPOSITORY}" --json body --jq .body 2>/dev/null || echo "")
+          # Dedup against the newest release *for our own prefix*, not the globally
+          # newest release. `gh release view` returns whatever release is latest
+          # across the whole repo — once a second prefix exists (e.g. an
+          # aw1000-edma-test experiment), its release would shadow ours and its
+          # different SHAs would make us rebuild every scheduled tick. The releases
+          # API returns newest-first, so [0] after filtering by prefix is our latest.
+          latest_release_body=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq "[.[] | select(.tag_name | startswith(\"${RELEASE_PREFIX}\"))][0].body // \"\"" 2>/dev/null || echo "")
 
           # Push means builder config/overlays/scripts changed → always rebuild.
           # workflow_dispatch is an explicit request → always rebuild.
