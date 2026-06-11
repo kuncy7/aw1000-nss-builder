@@ -1,20 +1,24 @@
 # Qualcommax NSS Builder — fork configuration.
 #
-# This is the single file you need to edit when forking. Everything else
-# (workflow, scripts, docs) reads from here.
+# *** EXPERIMENTAL BRANCH: test-edma-nss ***
+# Builds an AW1000 image against Julius Bairaktaris' EDMA-NSS rework:
+# NSS hardware offload running on OpenWrt main's upstream qca-edma/qca-ppe
+# drivers instead of the vendor qca-nss-dp/qca-ssdk stack.
+# Tree:  https://github.com/JuliusBairaktaris/openwrt-nss-edma/wiki
 #
-# After editing, push to your fork. GitHub Actions will pick up the change
-# and produce a release on the next scheduled run (or via "Run workflow").
+# This branch is for RAM-boot testing only (initramfs). The modem/WWAN path
+# is NOT supported here (no wwan packages, rmnet path untested upstream).
+# Do not merge to main.
 
 # Upstream OpenWrt source (the tree that will be checked out and built).
 upstream:
-  repo: qosmio/openwrt-ipq
-  branch: 25.12-nss
+  repo: JuliusBairaktaris/openwrt-nss-edma
+  branch: nss-edma-rework
 
 # NSS packages source. Tracked separately so we can detect package-only updates.
 nss_packages:
-  repo: qosmio/nss-packages
-  branch: NSS-12.5-K6.x-wwan
+  repo: JuliusBairaktaris/nss-packages
+  branch: edma-nss
 
 # Device id. Must match a directory under devices/<id>/ containing
 #   - config        (the OpenWrt .config file)
@@ -23,36 +27,13 @@ device: arcadyan_aw1000
 
 # Custom feeds appended to feeds.conf during build. Order matters.
 # Each entry becomes:  src-git <name> <url>
+# Only the edma-nss NSS feed — the qosmio/iceg/modem feeds are not used here.
 feeds:
-  - name: qosmio
-    url: https://github.com/qosmio/packages-extra
-  - name: sqm_nss
-    url: https://github.com/JuliusBairaktaris/sqm-scripts-nss
-  - name: iceg_modemdata
-    url: https://github.com/4IceG/luci-app-modemdata
-  - name: iceg_modemband
-    url: https://github.com/4IceG/luci-app-modemband
-  - name: iceg_sms_tool
-    url: https://github.com/4IceG/luci-app-sms-tool-js
-  - name: iceg_atinout
-    url: https://github.com/4IceG/luci-app-atinout
-  - name: modemfeed
-    url: https://github.com/kuncy7/modemfeed.git
-  - name: iceg_3ginfo_lite
-    url: https://github.com/4IceG/luci-app-3ginfo-lite
-  - name: iceg_lite_watchdog
-    url: https://github.com/4IceG/luci-app-lite-watchdog
-  - name: gspot_cpu
-    url: https://github.com/kuncy7/luci-gspot-feeds
-  - name: obsy_packages
-    url: https://github.com/obsy/packages
-  - name: obsy_modemdata
-    url: https://github.com/obsy/modemdata
-  - name: obsy_modemband
-    url: https://github.com/obsy/modemband
+  - name: nss
+    url: https://github.com/JuliusBairaktaris/nss-packages.git;edma-nss
 
 # Release publishing settings.
 release:
-  prefix: aw1000-nss             # tag = <prefix>-<UTC timestamp>-<run id>
+  prefix: aw1000-edma-test       # tag = <prefix>-<UTC timestamp>-<run id>
   keep: 3                        # number of newest releases to retain (older ones are deleted)
   artifact_retention_days: 7     # how long the GitHub Actions artifact (separate from the release) is kept
