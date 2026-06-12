@@ -1,13 +1,14 @@
 # Qualcommax NSS Builder — fork configuration.
 #
 # *** EXPERIMENTAL BRANCH: test-edma-nss ***
-# Builds an AW1000 image against Julius Bairaktaris' EDMA-NSS rework:
-# NSS hardware offload running on OpenWrt main's upstream qca-edma/qca-ppe
-# drivers instead of the vendor qca-nss-dp/qca-ssdk stack.
+# Full AW1000 build (package parity with the qosmio production build on main)
+# against Julius Bairaktaris' EDMA-NSS rework: NSS hardware offload running on
+# OpenWrt main's upstream qca-edma/qca-ppe drivers instead of the vendor
+# qca-nss-dp/qca-ssdk stack.
 # Tree:  https://github.com/JuliusBairaktaris/openwrt-nss-edma/wiki
 #
-# This branch is for RAM-boot testing only (initramfs). The modem/WWAN path
-# is NOT supported here (no wwan packages, rmnet path untested upstream).
+# Produces initramfs (USB/RAM boot, safe) AND sysupgrade images. Triggered
+# manually only (workflow_dispatch) — push/schedule fire on main exclusively.
 # Do not merge to main.
 
 # Upstream OpenWrt source (the tree that will be checked out and built).
@@ -25,12 +26,45 @@ nss_packages:
 #   - files/        (overlay rootfs, optional)
 device: arcadyan_aw1000
 
-# Custom feeds appended to feeds.conf during build. Order matters.
+# Custom feeds appended to feeds.conf during build. Order matters:
+#   - nss MUST stay first — the first `feeds install` wins for duplicate
+#     package names, and the NSS core (qca-nss-drv/ecm, sqm-scripts-nss in its
+#     EDMA flavour) must come from the Julius feed.
+#   - wwan (qosmio nss-packages, wwan branch) also carries its own NSS core
+#     copies; prepare-build.sh installs ONLY the modem packages from it
+#     (quectel-cm, luci-proto-quectel, rmnet-nss, mhi-pcie, qmi-wwan-quectel).
+#   - sqm_nss (production main) is intentionally absent: the EDMA-adapted
+#     sqm-scripts-nss ships in the nss feed.
 # Each entry becomes:  src-git <name> <url>
-# Only the edma-nss NSS feed — the qosmio/iceg/modem feeds are not used here.
 feeds:
   - name: nss
     url: https://github.com/JuliusBairaktaris/nss-packages.git;edma-nss
+  - name: wwan
+    url: https://github.com/qosmio/nss-packages.git;NSS-12.5-K6.x-wwan
+  - name: qosmio
+    url: https://github.com/qosmio/packages-extra
+  - name: iceg_modemdata
+    url: https://github.com/4IceG/luci-app-modemdata
+  - name: iceg_modemband
+    url: https://github.com/4IceG/luci-app-modemband
+  - name: iceg_sms_tool
+    url: https://github.com/4IceG/luci-app-sms-tool-js
+  - name: iceg_atinout
+    url: https://github.com/4IceG/luci-app-atinout
+  - name: modemfeed
+    url: https://github.com/kuncy7/modemfeed.git
+  - name: iceg_3ginfo_lite
+    url: https://github.com/4IceG/luci-app-3ginfo-lite
+  - name: iceg_lite_watchdog
+    url: https://github.com/4IceG/luci-app-lite-watchdog
+  - name: gspot_cpu
+    url: https://github.com/kuncy7/luci-gspot-feeds
+  - name: obsy_packages
+    url: https://github.com/obsy/packages
+  - name: obsy_modemdata
+    url: https://github.com/obsy/modemdata
+  - name: obsy_modemband
+    url: https://github.com/obsy/modemband
 
 # Release publishing settings.
 release:

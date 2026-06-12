@@ -1,19 +1,29 @@
 #
-# EXPERIMENTAL EDMA-NSS test config for the Arcadyan AW1000 (IPQ8072, 1 GB RAM).
+# EDMA-NSS full build for the Arcadyan AW1000 (IPQ8072, 1 GB RAM).
 #
-# Built against JuliusBairaktaris/openwrt-nss-edma (nss-edma-rework) + the
+# Package/feature parity with the qosmio production build (main branch), but
+# built against JuliusBairaktaris/openwrt-nss-edma (nss-edma-rework) + the
 # JuliusBairaktaris/nss-packages (edma-nss) feed: NSS hardware offload running
 # on OpenWrt main's upstream qca-edma/qca-ppe ethernet drivers.
 #
-# RAM-boot (initramfs) only. The image boots on the plain host stack; run
-# /usr/sbin/nss-up after logging in to arm the NSS data plane. A reboot always
-# returns to the host stack.
+# Produces BOTH the …-initramfs-uImage.itb (USB/RAM boot, safe) and the
+# standard squashfs sysupgrade images. Flashing the sysupgrade to NAND
+# replaces the qosmio production system — RAM boot first is recommended.
 #
-# Faithful copy of Julius' shared base + config.edma-nss, with three AW1000 deltas:
-#   1. device: arcadyan_aw1000 instead of xiaomi_ax3600
-#   2. 1 GB RAM: the 512 MB / MEDIUM memory profiles are omitted so defconfig
-#      picks the AW1000 (1 GB) defaults
-#   3. CONFIG_TARGET_ROOTFS_INITRAMFS=y so the …-initramfs-uImage.itb is built
+# Boot model (differs from qosmio, where NSS comes up by itself): rc.local
+# runs /usr/sbin/nss-up which arms fw_mask=0x5e (lan1-4 + wan — a port MUST be
+# in the mask at the first non-zero write or it never gets a VSI), starts ECM,
+# then /usr/sbin/modem-up reloads qmi_wwan_q (rmnet → NSS cores), sets
+# AT+CFUN=1 and hands the wan interface to netifd (proto quectel).
+#
+# Known parity gaps vs qosmio (packages that do not exist on the Julius tree
+# and are silently dropped by defconfig — verify in the first CI run):
+#   - kmod-qca-nss-drv-bridge-mgr, kmod-qca-nss-drv-vlan-mgr, kmod-qca-mcs
+#     (Julius' qca-nss-clients only ships pppoe/qdisc/igs)
+#   - kmod-nat46 + 464xlat (qosmio-tree packages; Profil B in etc/config/network
+#     will not work until provided another way)
+#   - luci-mod-status-nss (qosmio packages-extra; kept below — drop if it
+#     breaks the build)
 #
 
 ## Target Platform
@@ -21,7 +31,7 @@ CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq807x=y
 CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y
 
-## Build a RAM-only initramfs image (…-initramfs-uImage.itb) for USB/recovery boot.
+## RAM-boot image (…-initramfs-uImage.itb) in addition to the sysupgrade images.
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 
 ## Mark the image distinctly so it can't be confused with the qosmio production
@@ -89,6 +99,13 @@ CONFIG_PACKAGE_luci-app-bcp38=y
 ## Additional Packages and Utilities
 CONFIG_PACKAGE_curl=y
 CONFIG_PACKAGE_htop=y
+CONFIG_PACKAGE_jq=y
+CONFIG_PACKAGE_openssh-client=y
+CONFIG_PACKAGE_openssh-sftp-client=y
+CONFIG_PACKAGE_pigz=y
+CONFIG_PACKAGE_rsync=y
+CONFIG_PACKAGE_tcpdump=y
+CONFIG_PACKAGE_xz=y
 CONFIG_HTOP_LMSENSORS=n
 CONFIG_PACKAGE_iperf3=y
 CONFIG_PACKAGE_kmod-tcp-bbr=y
@@ -97,14 +114,12 @@ CONFIG_LIBCURL_OPENSSL=y
 CONFIG_PACKAGE_luci=y
 CONFIG_PACKAGE_luci-app-firewall=y
 CONFIG_PACKAGE_wpad-openssl=y
+CONFIG_PACKAGE_luci-mod-status-nss=y
+CONFIG_PACKAGE_luci-app-sqm=y
+CONFIG_PACKAGE_sqm-scripts-nss=y
 
 ## Redundant Default Packages
 CONFIG_PACKAGE_kmod-phy-aquantia=n
-CONFIG_PACKAGE_kmod-usb-core=n
-CONFIG_PACKAGE_kmod-usb-dwc3=n
-CONFIG_PACKAGE_kmod-usb-dwc3-qcom=n
-CONFIG_PACKAGE_kmod-usb-xhci-hcd=n
-CONFIG_PACKAGE_kmod-usb3=n
 CONFIG_PACKAGE_wpad-basic-mbedtls=n
 CONFIG_PACKAGE_luci-app-attendedsysupgrade=n
 CONFIG_PACKAGE_attendedsysupgrade-common=n
@@ -115,22 +130,118 @@ CONFIG_ATH11K_DEBUGFS_STA=n
 # Disables thermal throttling support for ath11k.
 CONFIG_ATH11K_THERMAL=n
 
-## ---- EDMA-NSS variant fragment (from Julius' config.edma-nss) ----
+## ---- EDMA-NSS variant (Julius' config.edma-nss + the verified v2 deltas) ----
 
-## NSS data plane + connection offload (ECM, PPPoE).
-## kmod-qca-ppe-nss (the data-plane glue) is pulled in by kmod-qca-nss-drv.
+## NSS data plane + connection offload. kmod-qca-ppe-nss (the data-plane glue)
+## is pulled in by kmod-qca-nss-drv; listed explicitly for clarity.
+CONFIG_PACKAGE_kmod-qca-ppe-nss=y
 CONFIG_PACKAGE_kmod-qca-nss-drv=y
 CONFIG_PACKAGE_kmod-qca-nss-ecm=y
 CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y
 CONFIG_NSS_FIRMWARE_VERSION_12_5=y
+CONFIG_NSS_MEM_PROFILE_HIGH=y
+CONFIG_NSS_DRV_C2C_ENABLE=y
+CONFIG_NSS_DRV_IGS_ENABLE=y
+CONFIG_NSS_DRV_IPV6_ENABLE=y
+CONFIG_NSS_DRV_PPPOE_ENABLE=y
+CONFIG_NSS_DRV_SHAPER_ENABLE=y
+CONFIG_NSS_DRV_VIRT_IF_ENABLE=y
+CONFIG_NSS_DRV_WIFIOFFLOAD_ENABLE=y
+CONFIG_NSS_DRV_WIFI_EXT_VDEV_ENABLE=y
 
-## ath11k NSS Wi-Fi offload (wifili). Boots host-mode (nss_offload=0,
-## frame_mode=2); /usr/sbin/nss-up moves the radios onto the NSS data path.
+## ath11k NSS Wi-Fi offload support compiled in; the image boots host-mode
+## Wi-Fi (proven stable with NSS armed). nss-up does NOT rebind the radios.
 CONFIG_ATH11K_NSS_SUPPORT=y
+CONFIG_ATH11K_NSS_MESH_SUPPORT=y
 CONFIG_PACKAGE_MAC80211_NSS_SUPPORT=y
 
 ## NSS qdisc/SQM (nss-edma.qos) + the SQM LuCI app
 CONFIG_PACKAGE_kmod-qca-nss-drv-qdisc=y
 CONFIG_PACKAGE_kmod-qca-nss-drv-igs=y
-CONFIG_PACKAGE_sqm-scripts-nss=y
-CONFIG_PACKAGE_luci-app-sqm=y
+
+## ---- Modem 5G: RMNET przez NSS (wwan feed = qosmio nss-packages) ----
+CONFIG_NSS_DRV_RMNET_ENABLE=y
+CONFIG_PACKAGE_kmod-rmnet-nss=y
+CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
+CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel=y
+CONFIG_PACKAGE_kmod-quectel-mhi-pcie=y
+CONFIG_PACKAGE_quectel-cm=y
+CONFIG_PACKAGE_luci-app-pcimodem=y
+CONFIG_PACKAGE_luci-proto-quectel=y
+
+## WireGuard
+CONFIG_PACKAGE_kmod-wireguard=y
+CONFIG_PACKAGE_wireguard-tools=y
+CONFIG_PACKAGE_luci-proto-wireguard=y
+
+## USB storage
+CONFIG_PACKAGE_kmod-scsi-core=y
+CONFIG_PACKAGE_kmod-usb-storage=y
+CONFIG_PACKAGE_kmod-usb-storage-uas=y
+
+## Filesystems (USB drives)
+CONFIG_PACKAGE_kmod-fs-vfat=y
+CONFIG_PACKAGE_kmod-fs-ntfs3=y
+CONFIG_PACKAGE_kmod-fs-f2fs=y
+
+## USB CDC ACM (modemy USB)
+CONFIG_PACKAGE_kmod-usb-acm=y
+
+## Crash logs
+CONFIG_PACKAGE_kmod-pstore=y
+CONFIG_PACKAGE_kmod-ramoops=y
+
+## MTD flash write
+CONFIG_PACKAGE_kmod-mtd-rw=y
+
+## GRE IPv6
+CONFIG_PACKAGE_kmod-gre6=y
+
+## USB support — VERIFIED FIX: Julius' base disables xhci, which kills the
+## whole USB bus (no root hub: no boot pendrive, no modem). Must stay =y.
+CONFIG_PACKAGE_kmod-usb-core=y
+CONFIG_PACKAGE_kmod-usb-dwc3=y
+CONFIG_PACKAGE_kmod-usb-dwc3-qcom=y
+CONFIG_PACKAGE_kmod-usb-xhci-hcd=y
+CONFIG_PACKAGE_kmod-usb3=y
+
+## Obsługa dongla Sonoff (CP210x USB-to-UART)
+CONFIG_PACKAGE_kmod-usb-serial-cp210x=y
+CONFIG_PACKAGE_ser2net=y
+
+## cellled (modemfeed)
+CONFIG_PACKAGE_cellled=y
+CONFIG_PACKAGE_luci-app-cellled=y
+
+## gSpotx2f
+CONFIG_PACKAGE_luci-app-cpu-perf=y
+CONFIG_PACKAGE_luci-app-cpu-status=y
+
+## 4IceG extra
+CONFIG_PACKAGE_luci-app-3ginfo-lite=y
+CONFIG_PACKAGE_luci-app-lite-watchdog=y
+
+## obsy
+CONFIG_PACKAGE_sysinfo=y
+
+## quectel-timesync (standardowy feed packages)
+CONFIG_PACKAGE_quectel-timesync=y
+
+## Pakiety 4IceG
+CONFIG_PACKAGE_luci-app-modemdata=y
+CONFIG_PACKAGE_luci-app-modemband=y
+CONFIG_PACKAGE_luci-app-sms-tool-js=y
+CONFIG_PACKAGE_luci-app-atinout=y
+CONFIG_PACKAGE_sms-tool=y
+CONFIG_PACKAGE_comgt=y
+
+## BusyBox
+# Use CONFIG_BUSYBOX_CONFIG_* (the build-driving symbol). CONFIG_BUSYBOX_DEFAULT_*
+# is prompt-less and `make defconfig` regenerates it from Kconfig, so it is inert.
+CONFIG_BUSYBOX_CONFIG_FEATURE_SYSLOG_INFO=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_REVERSE_SEARCH=y
+
+## 464xlat CLAT (IPv4-over-IPv6) — qosmio-tree packages; on the Julius tree
+## these are most likely dropped by defconfig (see parity gaps above).
+CONFIG_PACKAGE_kmod-nat46=y
+CONFIG_PACKAGE_464xlat=y

@@ -63,9 +63,22 @@ log::info "Updating all feeds"
 ./scripts/feeds update -a
 
 # Install each custom feed individually so failures are obvious.
+#
+# Exception: the `wwan` feed (qosmio/nss-packages, wwan branch) also carries
+# its own copies of the NSS core packages (qca-nss-drv, qca-nss-ecm, …) that
+# would shadow the Julius edma-nss versions if force-installed with `-p -a`.
+# Install only the modem packages from it; everything else resolves from the
+# nss feed (listed earlier in feeds.conf, so it wins for duplicates).
+WWAN_PACKAGES="quectel-cm luci-proto-quectel luci-app-pcimodem kmod-rmnet-nss kmod-quectel-mhi-pcie kmod-usb-net-qmi-wwan-quectel"
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   feed_name="$(awk '{print $2}' <<<"$line")"
+  if [[ "$feed_name" == "wwan" ]]; then
+    log::info "Installing modem packages only from feed: wwan ($WWAN_PACKAGES)"
+    # shellcheck disable=SC2086  # intentional word splitting of the package list
+    ./scripts/feeds install -p wwan $WWAN_PACKAGES
+    continue
+  fi
   log::info "Installing packages from feed: $feed_name"
   ./scripts/feeds install -a -p "$feed_name"
 done <<<"$FEEDS_LINES"
@@ -74,23 +87,30 @@ log::info "Installing all remaining packages"
 ./scripts/feeds install -a
 
 # 2a. Per-package post-install fixes for upstream incompatibilities.
-# quectel-cm 1.6.5 ships CMakeLists.txt with cmake_minimum_required(VERSION <3.5),
-# which CMake 4.x rejects. The CMake error message itself suggests this flag.
-quectel_cm_mk="feeds/nss_packages/wwan/utils/quectel-cm/Makefile"
-if [[ -f "$quectel_cm_mk" ]] && ! grep -q CMAKE_POLICY_VERSION_MINIMUM "$quectel_cm_mk"; then
-  log::info "Patching $quectel_cm_mk for CMake 4.x compatibility"
-  # Must be inserted after 'include cmake.mk' but before 'BuildPackage' --
-  # appending at EOF lands after BuildPackage and is ignored.
-  # shellcheck disable=SC2016  # $(INCLUDE_DIR) is a make variable, not shell
-  sed -i '/^include $(INCLUDE_DIR)\/cmake\.mk$/a\\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5' "$quectel_cm_mk"
-fi
+# The wwan packages live in feeds/nss_packages/wwan/ on the qosmio layout
+# (nss_packages IS the wwan repo there) and in feeds/wwan/wwan/ when the wwan
+# repo is added as a separate custom feed (the EDMA branch). Fix whichever exists.
+for quectel_cm_dir in feeds/nss_packages/wwan/utils/quectel-cm feeds/wwan/wwan/utils/quectel-cm; do
+  [[ -d "$quectel_cm_dir" ]] || continue
 
-# Fix quectel.sh for ash compatibility (|| assignments were joined on one line).
-quectel_sh="feeds/nss_packages/wwan/utils/quectel-cm/files/quectel.sh"
-if [[ -f "$quectel_sh" ]]; then
-  log::info "Replacing $quectel_sh with ash-compatible version"
-  cp "$BUILDER_REPO/$DEVICE_DIR/quectel.sh" "$quectel_sh"
-fi
+  # quectel-cm 1.6.5 ships CMakeLists.txt with cmake_minimum_required(VERSION <3.5),
+  # which CMake 4.x rejects. The CMake error message itself suggests this flag.
+  quectel_cm_mk="$quectel_cm_dir/Makefile"
+  if [[ -f "$quectel_cm_mk" ]] && ! grep -q CMAKE_POLICY_VERSION_MINIMUM "$quectel_cm_mk"; then
+    log::info "Patching $quectel_cm_mk for CMake 4.x compatibility"
+    # Must be inserted after 'include cmake.mk' but before 'BuildPackage' --
+    # appending at EOF lands after BuildPackage and is ignored.
+    # shellcheck disable=SC2016  # $(INCLUDE_DIR) is a make variable, not shell
+    sed -i '/^include $(INCLUDE_DIR)\/cmake\.mk$/a\\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5' "$quectel_cm_mk"
+  fi
+
+  # Fix quectel.sh for ash compatibility (|| assignments were joined on one line).
+  quectel_sh="$quectel_cm_dir/files/quectel.sh"
+  if [[ -f "$quectel_sh" ]]; then
+    log::info "Replacing $quectel_sh with ash-compatible version"
+    cp "$BUILDER_REPO/$DEVICE_DIR/quectel.sh" "$quectel_sh"
+  fi
+done
 
 # 3. Drop in device .config and resolve.
 log::info "Loading device config: $DEVICE_DIR/config"

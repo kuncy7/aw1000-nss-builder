@@ -1,0 +1,24 @@
+#!/bin/sh
+# Re-home the modem's rmnet on the NSS cores, then hand the wan interface to
+# netifd (proto 'quectel', see /etc/config/network). Run from rc.local AFTER
+# nss-up: at cold boot qmi_wwan_q registers before the NSS firmware is armed
+# ("will not use NSS path: -1"); reloading it afterwards yields
+# "NSS context created" (verified live on hardware, v2 image 2026-06-12).
+ifdown wan 2>/dev/null
+
+if lsmod 2>/dev/null | grep -q '^qmi_wwan_q'; then
+	rmmod qmi_wwan_q 2>/dev/null || true
+	sleep 1
+	modprobe qmi_wwan_q 2>/dev/null || true
+fi
+
+# Radio on. This unit boots with RF off (PS: Detached, MCC 0 despite
+# SIM_READY); AT+CFUN=1 attaches it instantly. Harmless when already enabled.
+i=0; while [ ! -e /dev/ttyUSB2 ] && [ $i -lt 15 ]; do sleep 1; i=$((i+1)); done
+[ -e /dev/ttyUSB2 ] && printf 'AT+CFUN=1\r' > /dev/ttyUSB2
+
+# Hand over to netifd: proto quectel (quectel.sh → quectel-cm) dials wan.
+i=0; while [ ! -e /dev/cdc-wdm0 ] && [ $i -lt 15 ]; do sleep 1; i=$((i+1)); done
+ifup wan
+
+exit 0

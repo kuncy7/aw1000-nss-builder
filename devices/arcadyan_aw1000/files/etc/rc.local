@@ -7,11 +7,33 @@
 	mv /etc/ssh/moduli.safe /etc/ssh/moduli
 }
 
-# Arm the NSS data plane at boot (firmware, Wi-Fi offload, ECM, SQM). This is
-# the "no Ethernet" variant: if AW1000 Wi-Fi only comes up on the NSS/wifili
-# data path, running nss-up here makes the SSID appear without needing a cable.
-# Output is logged to /tmp so it can be inspected after login; nss-up has a
-# host-mode Wi-Fi fallback, and a reboot always returns to the plain host stack.
-/usr/sbin/nss-up >/tmp/nss-up.log 2>&1 || logger -t nss-up "NSS bring-up failed, see /tmp/nss-up.log (host stack still active)"
+# 1. Arm the NSS data plane (lan1-4 + wan = 0x5e) + ECM, before the modem.
+#    On qosmio NSS comes up by itself (nss-dp is the ethernet driver); on the
+#    EDMA tree arming the fw_mask at boot is our job.
+/usr/sbin/nss-up >/tmp/nss-up.log 2>&1 || logger -t nss-up "NSS bring-up failed, see /tmp/nss-up.log"
+
+# 2. Wi-Fi fallback for RAM boot: on initramfs every boot is a first boot and
+#    10-wifi-setup (uci-defaults) can run before /etc/config/wireless exists.
+#    Apply the same production settings here if they did not stick.
+if [ -f /etc/config/wireless ] && [ "$(uci -q get wireless.default_radio0.disabled)" != "0" ]; then
+	uci batch <<'EOF'
+set wireless.radio0.disabled='0'
+set wireless.default_radio0.disabled='0'
+set wireless.default_radio0.ssid='MiFi_5G'
+set wireless.default_radio0.encryption='psk2'
+set wireless.default_radio0.key='12345678'
+set wireless.radio1.disabled='0'
+set wireless.default_radio1.disabled='0'
+set wireless.default_radio1.ssid='MiFI'
+set wireless.default_radio1.encryption='psk2'
+set wireless.default_radio1.key='12345678'
+EOF
+	uci commit wireless
+	wifi reload
+fi
+
+# 3. Bring the modem online: reload qmi_wwan_q (rmnet → NSS), AT+CFUN=1,
+#    then netifd dials wan (proto quectel).
+/usr/sbin/modem-up >/tmp/modem-up.log 2>&1 &
 
 exit 0
