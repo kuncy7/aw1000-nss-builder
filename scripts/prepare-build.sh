@@ -112,6 +112,42 @@ for quectel_cm_dir in feeds/nss_packages/wwan/utils/quectel-cm feeds/wwan/wwan/u
   fi
 done
 
+# 2b. nat46 + qca-nss-ecm MAP-T.
+# The EDMA tree's nat46 is plain upstream ayourtch/nat46: it neither stages its
+# headers nor exports the QCA MAP-T API (is_map_t_dev, xlate_*, nat46_get_rule_config,
+# …) that qca-nss-ecm's MAP-T path (enabled whenever kmod-nat46 is selected) needs.
+# Add both so 464xlat builds — and, once the qca-nss-clients map-t connmgr is built,
+# can be NSS-offloaded. The MAP-T export patch is the QCA "Export APIs for
+# acceleration engine" patch; the underlying functions it wraps (pairs_xlate_*,
+# netdev_nat46_instance, nat46_xlate_rulepair_t) still exist by the same names in
+# the current nat46, so it applies onto the current version (no old-version pin).
+nat46_pkg="package/kernel/nat46"
+if [[ -d "$nat46_pkg" ]]; then
+  mapt_patch="$BUILDER_REPO/package-patches/nat46/950-mapt-nss-ecm-api.patch"
+  if [[ -f "$mapt_patch" ]] && [[ ! -f "$nat46_pkg/patches/950-mapt-nss-ecm-api.patch" ]]; then
+    log::info "Adding nat46 MAP-T export patch (qca-nss-ecm dependency)"
+    mkdir -p "$nat46_pkg/patches"
+    cp "$mapt_patch" "$nat46_pkg/patches/"
+  fi
+
+  # Stage nat46 headers so qca-nss-ecm can #include <nat46-core.h>. Upstream nat46
+  # has no Build/InstallDev; insert one before the KernelPackage eval. Idempotent.
+  nat46_mk="$nat46_pkg/Makefile"
+  if [[ -f "$nat46_mk" ]] && ! grep -q 'Build/InstallDev' "$nat46_mk"; then
+    log::info "Adding Build/InstallDev (stage nat46 headers) to $nat46_mk"
+    awk '
+      /^\$\(eval \$\(call KernelPackage,nat46\)\)/ {
+        print "define Build/InstallDev"
+        print "\t$(INSTALL_DIR) $(STAGING_DIR)/usr/include/nat46"
+        print "\t$(INSTALL_DATA) $(PKG_BUILD_DIR)/nat46/modules/*.h $(STAGING_DIR)/usr/include/nat46/"
+        print "endef"
+        print ""
+      }
+      { print }
+    ' "$nat46_mk" >"$nat46_mk.tmp" && mv "$nat46_mk.tmp" "$nat46_mk"
+  fi
+fi
+
 # 3. Drop in device .config and resolve.
 log::info "Loading device config: $DEVICE_DIR/config"
 cp "$BUILDER_REPO/$DEVICE_DIR/config" .config
