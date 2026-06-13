@@ -112,6 +112,29 @@ for quectel_cm_dir in feeds/nss_packages/wwan/utils/quectel-cm feeds/wwan/wwan/u
   fi
 done
 
+# qca-nss-ecm enables MAP-T whenever kmod-nat46 is selected (its Makefile:
+# `ifneq ($(CONFIG_PACKAGE_kmod-nat46),) -> ECM_INTERFACE_MAP_T_ENABLE=y`), and
+# then #includes <nat46-core.h> from $(STAGING_DIR)/usr/include/nat46. The nat46
+# package on OpenWrt main / the Julius EDMA tree does NOT install that header
+# (no Build/InstallDev), so the ECM build fails with "nat46-core.h: No such
+# file or directory". qosmio's nat46 carries exactly this InstallDev; add it
+# here when missing (the header lives in $(PKG_BUILD_DIR)/nat46/modules/*.h on
+# both nat46 versions). Idempotent: skip if InstallDev is already defined.
+nat46_mk="package/kernel/nat46/Makefile"
+if [[ -f "$nat46_mk" ]] && ! grep -q 'Build/InstallDev' "$nat46_mk"; then
+  log::info "Adding Build/InstallDev (stage nat46-core.h for qca-nss-ecm MAP-T) to $nat46_mk"
+  awk '
+    /^\$\(eval \$\(call KernelPackage,nat46\)\)/ {
+      print "define Build/InstallDev"
+      print "\t$(INSTALL_DIR) $(STAGING_DIR)/usr/include/nat46"
+      print "\t$(INSTALL_DATA) $(PKG_BUILD_DIR)/nat46/modules/*.h $(STAGING_DIR)/usr/include/nat46/"
+      print "endef"
+      print ""
+    }
+    { print }
+  ' "$nat46_mk" >"$nat46_mk.tmp" && mv "$nat46_mk.tmp" "$nat46_mk"
+fi
+
 # 3. Drop in device .config and resolve.
 log::info "Loading device config: $DEVICE_DIR/config"
 cp "$BUILDER_REPO/$DEVICE_DIR/config" .config
