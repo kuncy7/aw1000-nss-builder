@@ -123,11 +123,11 @@ done
 # the current nat46, so it applies onto the current version (no old-version pin).
 nat46_pkg="package/kernel/nat46"
 if [[ -d "$nat46_pkg" ]]; then
-  mapt_patch="$BUILDER_REPO/package-patches/nat46/950-mapt-nss-ecm-api.patch"
-  if [[ -f "$mapt_patch" ]] && [[ ! -f "$nat46_pkg/patches/950-mapt-nss-ecm-api.patch" ]]; then
-    log::info "Adding nat46 MAP-T export patch (qca-nss-ecm dependency)"
+  nat46_patch_src="$BUILDER_REPO/package-patches/nat46"
+  if compgen -G "$nat46_patch_src/*.patch" >/dev/null; then
+    log::info "Adding nat46 patches (qca-nss-ecm MAP-T dependency)"
     mkdir -p "$nat46_pkg/patches"
-    cp "$mapt_patch" "$nat46_pkg/patches/"
+    cp "$nat46_patch_src"/*.patch "$nat46_pkg/patches/"
   fi
 
   # Stage nat46 headers so qca-nss-ecm can #include <nat46-core.h>. Upstream nat46
