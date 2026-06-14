@@ -146,6 +146,73 @@ if [[ -d "$nat46_pkg" ]]; then
       { print }
     ' "$nat46_mk" >"$nat46_mk.tmp" && mv "$nat46_mk.tmp" "$nat46_mk"
   fi
+
+  # Export nat46's exported symbols (is_map_t_dev) to other modules. nat46 builds
+  # in nat46/modules/, so its Module.symvers lands there — but OpenWrt copies the
+  # shared symvers from $(PKG_BUILD_DIR)/Module.symvers. Without this copy the
+  # symbol is in nat46's own symvers yet ABSENT from the one qca-nss-ecm links
+  # against -> "modpost: is_map_t_dev undefined". Append the copy to Build/Compile
+  # (before its endef). Idempotent.
+  if [[ -f "$nat46_mk" ]] && ! grep -qF 'nat46/modules/Module.symvers $(PKG_BUILD_DIR)/Module.symvers' "$nat46_mk"; then
+    log::info "Adding Module.symvers copy to nat46 Build/Compile in $nat46_mk"
+    awk '
+      /^define Build\/Compile$/ { incompile=1 }
+      incompile && /^endef$/ {
+        print "\t$(INSTALL_DATA) $(PKG_BUILD_DIR)/nat46/modules/Module.symvers $(PKG_BUILD_DIR)/Module.symvers"
+        incompile=0
+      }
+      { print }
+    ' "$nat46_mk" >"$nat46_mk.tmp" && mv "$nat46_mk.tmp" "$nat46_mk"
+  fi
+fi
+
+# 2c. qca-nss-clients: add the MAP-T connection manager subpackage.
+# The EDMA tree's qca-nss-clients ships the map/map-t/ source but defines no
+# KernelPackage for it (only pppoe/qdisc/igs). Inject kmod-qca-nss-drv-map-t:
+# the package definition, the `map-t=y` build flag (+ the nat46 staging include),
+# and the BuildPackage eval. It drives the nat46 MAP-T API exported by the nat46
+# patch above, giving NSS hardware offload of 464xlat/MAP-T. Idempotent.
+nss_clients_mk="feeds/nss/qca-nss-clients/Makefile"
+if [[ -f "$nss_clients_mk" ]] && ! grep -q 'qca-nss-drv-map-t' "$nss_clients_mk"; then
+  log::info "Adding kmod-qca-nss-drv-map-t (MAP-T connmgr) to $nss_clients_mk"
+  awk '
+    /^ifneq \(\$\(CONFIG_PACKAGE_kmod-qca-nss-drv-qdisc\),\)/ && !defdone {
+      print "define KernelPackage/qca-nss-drv-map-t"
+      print "  SECTION:=kernel"
+      print "  CATEGORY:=Kernel modules"
+      print "  SUBMENU:=Network Devices"
+      print "  TITLE:=NSS connection manager for MAP-T"
+      print "  DEPENDS:=@(TARGET_qualcommax||TARGET_ipq806x) \\"
+      print "\t   +kmod-qca-nss-drv \\"
+      print "\t   +kmod-nat46"
+      print "  FILES:=$(PKG_BUILD_DIR)/map/map-t/qca-nss-map-t.ko"
+      print "  AUTOLOAD:=$(call AutoLoad,51,qca-nss-map-t)"
+      print "endef"
+      print ""
+      print "define KernelPackage/qca-nss-drv-map-t/description"
+      print "NSS connection manager for MAP-T - hardware offload of 464xlat/MAP-T."
+      print "endef"
+      print ""
+      defdone=1
+    }
+    /^NSS_CLIENTS_MAKE_OPTS\+=pppoe=y/ { afterpppoe=1 }
+    afterpppoe && /^endif/ {
+      print
+      print ""
+      print "ifneq ($(CONFIG_PACKAGE_kmod-qca-nss-drv-map-t),)"
+      print "NSS_CLIENTS_MAKE_OPTS+=map-t=y"
+      print "EXTRA_CFLAGS+= -I$(STAGING_DIR)/usr/include/nat46"
+      print "endif"
+      afterpppoe=0
+      next
+    }
+    /^\$\(eval \$\(call KernelPackage,qca-nss-drv-igs\)\)/ {
+      print
+      print "$(eval $(call KernelPackage,qca-nss-drv-map-t))"
+      next
+    }
+    { print }
+  ' "$nss_clients_mk" >"$nss_clients_mk.tmp" && mv "$nss_clients_mk.tmp" "$nss_clients_mk"
 fi
 
 # 3. Drop in device .config and resolve.
