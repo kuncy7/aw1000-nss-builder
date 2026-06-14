@@ -110,6 +110,18 @@ for quectel_cm_dir in feeds/nss_packages/wwan/utils/quectel-cm feeds/wwan/wwan/u
     log::info "Replacing $quectel_sh with ash-compatible version"
     cp "$BUILDER_REPO/$DEVICE_DIR/quectel.sh" "$quectel_sh"
   fi
+
+  # IPv6 CGACT-race + CFUN=1 patch: deterministic IPv6-only dial on split-PDN
+  # carriers (Orange PL) where a bare quectel-cm -6 hits verbose 241. The feed
+  # ships the source in-tree at a fixed version, so this applies with zero fuzz.
+  # Idempotent (skip if already applied). Fails the build loudly if it can't
+  # apply (e.g. upstream bumped quectel-cm) rather than silently shipping stock.
+  qcm_patch="$BUILDER_REPO/package-patches/quectel-cm/950-ipv6-cgact-race.patch"
+  if [[ -f "$qcm_patch" ]] && ! grep -q 'QUECTEL_V6_RACE_MAX' "$quectel_cm_dir/src/QMIThread.c" 2>/dev/null; then
+    log::info "Applying quectel-cm IPv6 CGACT-race patch"
+    patch -p1 -d "$quectel_cm_dir" <"$qcm_patch"
+    sed -i 's/^PKG_RELEASE:=4$/PKG_RELEASE:=5/' "$quectel_cm_mk"
+  fi
 done
 
 # 2b. nat46 + qca-nss-ecm MAP-T.
