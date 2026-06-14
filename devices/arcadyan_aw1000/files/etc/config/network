@@ -29,15 +29,17 @@ config interface 'wan'
 	option delay '15'
 
 # === PROFIL B: IPv6-only + 464xlat (recepta alula) =========================
-# UWAGA: przed przelaczeniem rodziny adresow wykonac NA MODEMIE:
-#   echo -e 'AT+QCFG="ResetFactory"\r' > /dev/ttyUSB2   (lub ttyUSB3)
-#   i zrestartowac modem. Bez tego: verbose 241.
-# Po przelaczeniu NIE wracac na Profil A bez ponownego ResetFactory.
+# Validated on AW1000 (RG500Q-EA / Orange PL). No ResetFactory needed: the
+# patched quectel-cm (r5) wins the CGACT re-activation race internally.
+# 'multiplexing 1' is REQUIRED so quectel.sh dials IPv6-only as
+# `quectel-cm -6 -n 2 -m 1` (v6mux=1 for qmap_mode=1) — without it the dial
+# uses the wrong mux/index and never establishes.
 # Aby uzyc: zakomentowac caly Profil A powyzej, odkomentowac ponizsze,
 # nastepnie: /etc/init.d/network restart
 #
 # config interface 'wan'
 # 	option proto 'quectel'
+# 	option multiplexing '1'
 # 	option device '/dev/cdc-wdm0'
 # 	option pdptype 'ipv6'
 # 	option apn 'internetipv6'
@@ -46,4 +48,6 @@ config interface 'wan'
 #
 # config interface 'clat'
 # 	option proto '464xlat'
+# 	option tunlink 'wan'
+# 	option ip6prefix '64:ff9b::/96'
 # ===========================================================================
