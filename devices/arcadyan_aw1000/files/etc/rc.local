@@ -24,7 +24,7 @@ set wireless.default_radio0.encryption='psk2'
 set wireless.default_radio0.key='12345678'
 set wireless.radio1.disabled='0'
 set wireless.default_radio1.disabled='0'
-set wireless.default_radio1.ssid='MiFI'
+set wireless.default_radio1.ssid='MiFi'
 set wireless.default_radio1.encryption='psk2'
 set wireless.default_radio1.key='12345678'
 EOF
