@@ -124,6 +124,25 @@ for quectel_cm_dir in feeds/nss_packages/wwan/utils/quectel-cm feeds/wwan/wwan/u
   fi
 done
 
+# 2a-bis. rmnet -> NSS deferred attach (quectel-qmi-wwan).
+# qmi_wwan_q attaches the qmap netdev to the NSS data path once, at USB-probe
+# time. On the EDMA tree the NSS data plane is armed later (at runtime), so that
+# single attempt races the arming and usually loses ("Device will not use NSS
+# path: -1"), leaving rmnet off NSS for the device's whole life. The patch makes
+# the qmap netdev self-attach via a bounded delayed-work retry until the data
+# plane is armed -- timing independent, no module reload, no dropped data call.
+# This removes the need for the modem-up qmi_wwan_q reload hack. Idempotent;
+# fails loudly if it cannot apply (e.g. upstream bumped quectel-qmi-wwan).
+qqw_patch="$BUILDER_REPO/package-patches/quectel-qmi-wwan/950-rmnet-nss-deferred-attach.patch"
+for qqw_dir in feeds/nss_packages/wwan/driver/quectel-qmi-wwan feeds/wwan/wwan/driver/quectel-qmi-wwan; do
+  [[ -d "$qqw_dir" ]] || continue
+  if [[ -f "$qqw_patch" ]] && ! grep -q 'qmap_nss_retry_work' "$qqw_dir/src/qmi_wwan_q.c" 2>/dev/null; then
+    log::info "Applying quectel-qmi-wwan rmnet->NSS deferred-attach patch"
+    patch -p1 -d "$qqw_dir" <"$qqw_patch"
+    sed -i 's/^PKG_RELEASE:=2$/PKG_RELEASE:=3/' "$qqw_dir/Makefile"
+  fi
+done
+
 # 2b. nat46 + qca-nss-ecm MAP-T.
 # The EDMA tree's nat46 is plain upstream ayourtch/nat46: it neither stages its
 # headers nor exports the QCA MAP-T API (is_map_t_dev, xlate_*, nat46_get_rule_config,

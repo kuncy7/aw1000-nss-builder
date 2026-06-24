@@ -1,0 +1,117 @@
+--- a/src/qmi_wwan_q.c	2026-06-23 21:52:53.592290516 +0200
++++ b/src/qmi_wwan_q.c	2026-06-23 21:54:06.982691737 +0200
+@@ -225,6 +225,8 @@
+ #endif
+ #endif
+ 	uint use_qca_nss;
++	struct delayed_work nss_retry_work;
++	int nss_retry_count;
+ };
+ 
+ struct qmap_hdr {
+@@ -1310,6 +1312,64 @@
+ 	return RX_HANDLER_PASS;
+ }
+ 
++/* NSS data-plane deferred attach.
++ *
++ * nss_cb->nss_create() only succeeds once the NSS data plane is armed (the
++ * qca-ppe-nss fw_mask has been written and the firmware booted). On the EDMA
++ * stack arming is an explicit runtime step that can happen after the modem has
++ * already enumerated and created its qmap netdev, so a single attach attempt at
++ * device-creation time races the arming and usually loses ("Device will not use
++ * NSS path: -1"), leaving rmnet off the NSS path for the device's whole life.
++ *
++ * Rather than forcing a boot ordering (or a driver rebind, as ath11k needs), we
++ * let the qmap netdev self-attach: try once at creation and, if NSS is not up
++ * yet, retry from a delayed work until it is (bounded). This is timing
++ * independent and never tears down the data call; the attach call is the
++ * existing, safe nss_create path, so a failed attempt is a harmless no-op. */
++#define QMAP_NSS_RETRY_MAX	30	/* give up after ~60s */
++#define QMAP_NSS_RETRY_MS	2000
++
++static int qmap_nss_attach(struct net_device *qmap_net)
++{
++	struct qmap_priv *priv = netdev_priv(qmap_net);
++	int rc;
++
++	if (!nss_cb || priv->use_qca_nss)
++		return 0;
++
++	rc = nss_cb->nss_create(qmap_net);
++	if (rc)
++		return rc;
++
++	priv->use_qca_nss = 1;
++	rtnl_lock();
++	netdev_rx_handler_register(qmap_net, qca_nss_rx_handler, NULL);
++	rtnl_unlock();
++	return 0;
++}
++
++static void qmap_nss_retry_work(struct work_struct *work)
++{
++	struct qmap_priv *priv = container_of(to_delayed_work(work),
++					      struct qmap_priv, nss_retry_work);
++	struct net_device *qmap_net = priv->self_dev;
++
++	if (qmap_nss_attach(qmap_net) == 0) {
++		netdev_info(qmap_net, "NSS context created (deferred, after %d retr%s)\n",
++			    priv->nss_retry_count,
++			    priv->nss_retry_count == 1 ? "y" : "ies");
++		return;
++	}
++
++	if (++priv->nss_retry_count < QMAP_NSS_RETRY_MAX)
++		schedule_delayed_work(&priv->nss_retry_work,
++				      msecs_to_jiffies(QMAP_NSS_RETRY_MS));
++	else
++		netdev_warn(qmap_net,
++			    "NSS data plane still down after %d retries; staying on host path\n",
++			    priv->nss_retry_count);
++}
++
+ static int qmap_register_device(sQmiWwanQmap * pDev, u8 offset_id)
+ {
+ 	struct net_device *real_dev = pDev->mpNetDev->net;
+@@ -1336,6 +1396,8 @@
+     priv->real_dev = real_dev;
+     priv->self_dev = qmap_net;
+     priv->dev = pDev->mpNetDev;
++    INIT_DELAYED_WORK(&priv->nss_retry_work, qmap_nss_retry_work);
++    priv->nss_retry_count = 0;
+     priv->qmap_version = pDev->qmap_version;
+     priv->mux_id = QUECTEL_QMAP_MUX_ID + offset_id;
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+@@ -1386,16 +1448,14 @@
+ 	netif_carrier_off(qmap_net);
+ 
+ 	if (nss_cb && use_qca_nss) {
+-		int rc = nss_cb->nss_create(qmap_net);
+-		if (rc) {
+-			/* Log, but don't fail the device creation */
+-			netdev_err(qmap_net, "Device will not use NSS path: %d\n", rc);
+-		} else {
+-			priv->use_qca_nss = 1;
++		if (qmap_nss_attach(qmap_net) == 0) {
+ 			netdev_info(qmap_net, "NSS context created\n");
+-			rtnl_lock();
+-			netdev_rx_handler_register(qmap_net, qca_nss_rx_handler, NULL);
+-			rtnl_unlock();
++		} else {
++			/* NSS data plane not armed yet: self-attach later instead of
++			 * losing the NSS path for the device's whole lifetime. */
++			netdev_info(qmap_net, "NSS path not ready, retrying until the data plane is armed\n");
++			schedule_delayed_work(&priv->nss_retry_work,
++					      msecs_to_jiffies(QMAP_NSS_RETRY_MS));
+ 		}
+ 	}
+ 
+@@ -1427,6 +1487,7 @@
+ 
+ 		hrtimer_cancel(&priv->agg_hrtimer);
+ 		cancel_work_sync(&priv->agg_wq);
++		cancel_delayed_work_sync(&priv->nss_retry_work);
+ 		spin_lock_irqsave(&priv->agg_lock, flags);
+ 		if (priv->agg_skb) {
+ 			kfree_skb(priv->agg_skb);

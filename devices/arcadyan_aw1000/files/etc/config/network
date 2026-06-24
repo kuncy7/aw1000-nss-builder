@@ -28,12 +28,21 @@ config interface 'wan'
 	option auth 'none'
 	option delay '15'
 
-# === PROFIL B: IPv6-only + 464xlat (recepta alula) =========================
+# === PROFIL B: IPv6-only + native 464xlat (Orange PL) ======================
 # Validated on AW1000 (RG500Q-EA / Orange PL). No ResetFactory needed: the
 # patched quectel-cm (r5) wins the CGACT re-activation race internally.
 # 'multiplexing 1' is REQUIRED so quectel.sh dials IPv6-only as
-# `quectel-cm -6 -n 2 -m 1` (v6mux=1 for qmap_mode=1) — without it the dial
-# uses the wrong mux/index and never establishes.
+# `quectel-cm -6 -n 2 -m 1` (v6mux=1 for qmap_mode=1).
+#
+# CLAT is NATIVE: do NOT add an explicit 'clat' interface. With pdptype ipv6
+# odhcp6c brings up wan_6 (dhcpv6) and auto-spawns a '464xlat' interface
+# (wan_6_4); 464xlatcfg discovers the NAT64 prefix via the modem's DNS64.
+# IMPORTANT: do NOT pin lan 'dns' to a non-DNS64 resolver (e.g. an upstream
+# router) — that breaks the prefix discovery and makes wan_6_4 flap. dnsmasq
+# forwarding to the modem's Orange DNS64 (default) is what makes it work.
+# An explicit clat with `tunlink 'wan'` does NOT work (wan's l3_device is wwan0,
+# which has no global IPv6 -> NO_DEVICE); if you ever need an explicit one use
+# `tunlink 'wan_6'`.
 # Aby uzyc: zakomentowac caly Profil A powyzej, odkomentowac ponizsze,
 # nastepnie: /etc/init.d/network restart
 #
@@ -45,9 +54,4 @@ config interface 'wan'
 # 	option apn 'internetipv6'
 # 	option auth 'none'
 # 	option delay '15'
-#
-# config interface 'clat'
-# 	option proto '464xlat'
-# 	option tunlink 'wan'
-# 	option ip6prefix '64:ff9b::/96'
 # ===========================================================================

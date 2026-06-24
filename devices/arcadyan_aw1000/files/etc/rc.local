@@ -32,8 +32,28 @@ EOF
 	wifi reload
 fi
 
-# 3. Bring the modem online: reload qmi_wwan_q (rmnet → NSS), AT+CFUN=1,
-#    then netifd dials wan (proto quectel).
+# 3. Wi-Fi NSS offload (wifili). NSS is armed (step 1) but ath11k loaded in host
+#    mode at boot, so flip nss_offload and rebind the radio to re-probe with
+#    wifili attached, then (re)start qca-nss-pbuf. Julius's documented bring-up;
+#    a Wi-Fi client's forwarded traffic then stays on the NSS path (wifili -> NSS).
+#    NOTE: the radios renumber after the rebind (e.g. phy0/phy1 -> phy2/phy3) —
+#    expected; check iwinfo / hostapd, not fixed phyN names.
+if [ -r /sys/module/ath11k/parameters/nss_offload ]; then
+	{
+		echo 1 > /sys/module/ath11k/parameters/nss_offload
+		wifi down
+		echo c000000.wifi > /sys/bus/platform/drivers/ath11k/unbind
+		sleep 1
+		echo c000000.wifi > /sys/bus/platform/drivers/ath11k/bind
+		sleep 2
+		/etc/init.d/qca-nss-pbuf restart
+		wifi up
+	} >/tmp/wifi-nss.log 2>&1
+fi
+
+# 4. Bring the modem online: AT+CFUN=1, then netifd dials wan (proto quectel).
+#    The qmi_wwan_q reload in modem-up gives an immediate rmnet->NSS attach; the
+#    deferred-attach patch (prepare-build.sh 2a-bis) is the timing-safe fallback.
 /usr/sbin/modem-up >/tmp/modem-up.log 2>&1 &
 
 exit 0
