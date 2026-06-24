@@ -1,0 +1,158 @@
+quectel-cm: win the IPv6 CID re-activation race (Orange split-PDN) + CFUN=1
+
+On split-PDN carriers (Orange PL: IPv4 on internetipv6/CID1, IPv6 auto-activated
+on internetipv6/CID2), a plain `quectel-cm -6` gets verbose 241
+(INTERFACE_IN_USE_CONFIG_MATCH) because the network re-activates the IPv6 PDN
+within ~2s. quectel_send_at() hammers AT+CGACT=0,<pdp> and retries START until
+the deactivate window is hit (deterministic, <1s); main.c sends AT+CFUN=1 first
+(bare quectel-cm leaves the modem Detached). IPv4 path untouched (V6-only branch).
+Verified live on AW1000 (RG500Q-EA): ping6 0% loss, stable.
+
+diff --git a/src/QMIThread.c b/src/QMIThread.c
+index 8f7e866..9bd2e49 100644
+--- a/src/QMIThread.c
++++ b/src/QMIThread.c
+@@ -15,6 +15,7 @@
+ ******************************************************************************/
+ #include "QMIThread.h"
+ #include <inttypes.h>
++#include <stdarg.h>
+ 
+ #ifndef MIN
+ #define MIN(a, b)	((a) < (b)? (a): (b))
+@@ -1832,21 +1833,76 @@ static int requestQueryDataCall(UCHAR  *pConnectionStatus, int curIpFamily) {
+     return 0;
+ }
+ 
++/* Maximum deactivate+retry attempts when an IPv6 START_NETWORK collides with an
++ * auto-activated PDN (verbose 241). ~90 * ~250ms ~= 22s of racing per call. */
++#define QUECTEL_V6_RACE_MAX 90
++
++/* Fire a single AT command at the modem's AT port, then return. Used to win the
++ * race against Orange PL re-activating the IPv6 PDN, and to bring RF online.
++ * Port order: $QUECTEL_AT_PORT, then /dev/ttyUSB2, then /dev/ttyUSB3. */
++void quectel_send_at(const char *fmt, ...) {
++    char cmd[96];
++    va_list ap;
++    int i, np = 0;
++    const char *ports[3];
++    const char *env = getenv("QUECTEL_AT_PORT");
++
++    va_start(ap, fmt);
++    vsnprintf(cmd, sizeof(cmd), fmt, ap);
++    va_end(ap);
++
++    if (env && env[0])
++        ports[np++] = env;
++    ports[np++] = "/dev/ttyUSB2";
++    ports[np++] = "/dev/ttyUSB3";
++
++    for (i = 0; i < np; i++) {
++        char line[112];
++        int n;
++        struct termios t;
++        int fd = open(ports[i], O_RDWR | O_NOCTTY);
++
++        if (fd < 0)
++            continue;
++
++        if (tcgetattr(fd, &t) == 0) {
++            cfmakeraw(&t);
++            cfsetispeed(&t, B115200);
++            cfsetospeed(&t, B115200);
++            tcsetattr(fd, TCSANOW, &t);
++        }
++
++        n = snprintf(line, sizeof(line), "%s\r", cmd);
++        if (write(fd, line, n) > 0)
++            tcdrain(fd);
++        usleep(20 * 1000);
++        tcflush(fd, TCIFLUSH);
++        close(fd);
++        dbg_time("quectel_send_at[%s]: %s", ports[i], cmd);
++        return;
++    }
++    dbg_time("quectel_send_at: no usable AT port for: %s", cmd);
++}
++
+ static int requestSetupDataCall(PROFILE_T *profile, int curIpFamily) {
+     PQCQMIMSG pRequest;
+     PQCQMIMSG pResponse;
+     PQMUX_MSG pMUXMsg;
+     int err = 0;
+     UCHAR QMIType = (curIpFamily == IpFamilyV4) ? QMUX_TYPE_WDS : QMUX_TYPE_WDS_IPV6;
++    int v6_race = 0;
+ 
+ //DualIPSupported means can get ipv4 & ipv6 address at the same time, one wds for ipv4, the other wds for ipv6
+     profile->curIpFamily = curIpFamily;
++
++_setup_data_call_start:
+     pRequest = ComposeQMUXMsg(QMIType, QMIWDS_START_NETWORK_INTERFACE_REQ, WdsStartNwInterfaceReq, profile);
+     err = QmiThreadSendQMITimeout(pRequest, &pResponse, 120 * 1000, __func__);
+     qmi_rsp_check();
+ 
+     if (le16_to_cpu(pMUXMsg->QMUXMsgHdrResp.QMUXResult) || le16_to_cpu(pMUXMsg->QMUXMsgHdrResp.QMUXError)) {
+         PQMI_TLV_HDR pTLVHdr;
++        uint16_t verbose_call_end_reason = 0;
+ 
+         pTLVHdr = GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, 0x10);
+         if (pTLVHdr) {
+@@ -1859,7 +1915,7 @@ static int requestSetupDataCall(PROFILE_T *profile, int curIpFamily) {
+         if (pTLVHdr) {
+             uint16_t *data16 = (uint16_t *)(pTLVHdr+1);
+             uint16_t call_end_reason_type = le16_to_cpu(data16[0]);
+-            uint16_t verbose_call_end_reason  = le16_to_cpu(data16[1]);
++            verbose_call_end_reason  = le16_to_cpu(data16[1]);
+ 
+             dbg_time("call_end_reason_type is %d", call_end_reason_type);
+             dbg_time("call_end_reason_verbose is %d", verbose_call_end_reason);
+@@ -1867,6 +1923,22 @@ static int requestSetupDataCall(PROFILE_T *profile, int curIpFamily) {
+ 
+         err = le16_to_cpu(pMUXMsg->QMUXMsgHdrResp.QMUXError);
+         free(pResponse);
++
++        /* Orange PL auto-activates the IPv6 PDN (internetipv6) at every attach,
++         * so a fresh IPv6 START collides with it -> verbose 241
++         * (INTERFACE_IN_USE_CONFIG_MATCH). Deactivate that context over AT and
++         * immediately re-issue START to win the <2s window before the network
++         * brings it back. Harmless on a clean modem: CGACT=0 on a down context
++         * just returns, then START succeeds on the next pass. */
++        if (curIpFamily == IpFamilyV6 && v6_race < QUECTEL_V6_RACE_MAX) {
++            v6_race++;
++            dbg_time("%s: IPv6 setup failed (verbose %d); deactivate pdp %d and retry START (%d/%d)",
++                __func__, verbose_call_end_reason, profile->pdp, v6_race, QUECTEL_V6_RACE_MAX);
++            quectel_send_at("AT+CGACT=0,%d", profile->pdp);
++            usleep(150 * 1000);
++            goto _setup_data_call_start;
++        }
++
+         return err;
+     }
+ 
+diff --git a/src/QMIThread.h b/src/QMIThread.h
+index 8ce2cff..02b8953 100644
+--- a/src/QMIThread.h
++++ b/src/QMIThread.h
+@@ -375,6 +375,7 @@ void update_ipv4_address(const char *ifname, const char *ip, const char *gw, uns
+ void update_ipv6_address(const char *ifname, const char *ip, const char *gw, unsigned prefix);
+ int reattach_driver(PROFILE_T *profile);
+ extern void no_trunc_strncpy(char *dest, const char *src, size_t dest_size);
++extern void quectel_send_at(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+ 
+ enum
+ {
+diff --git a/src/main.c b/src/main.c
+index 579b4f1..67451ff 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -364,6 +364,10 @@ static int qmi_main(PROFILE_T *profile)
+         }
+     }
+ 
++    /* Bare quectel-cm can leave the RG500Q detached; enable RF so it registers
++     * (previously done out-of-band by /usr/sbin/modem-up). */
++    quectel_send_at("AT+CFUN=1");
++
+     request_ops->requestRegistrationState(&PSAttachedState);
+ 
+ #ifdef CONFIG_ENABLE_QOS

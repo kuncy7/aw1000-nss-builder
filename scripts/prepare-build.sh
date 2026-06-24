@@ -92,6 +92,24 @@ if [[ -f "$quectel_sh" ]]; then
   cp "$BUILDER_REPO/$DEVICE_DIR/quectel.sh" "$quectel_sh"
 fi
 
+# IPv6 CGACT-race + CFUN=1 patch: deterministic IPv6-only dial on split-PDN
+# carriers (Orange PL) where a bare quectel-cm -6 hits verbose 241
+# (INTERFACE_IN_USE_CONFIG_MATCH) because the network re-activates the IPv6 PDN
+# within ~2s. The patch hammers AT+CGACT=0,<pdp> and retries START until it wins
+# the deactivate window (deterministic, <1s); it also sends AT+CFUN=1 so the
+# modem registers. IPv4 path untouched. This is what makes Profil B (IPv6-only +
+# 464xlat) come up without an AT+QCFG="ResetFactory". The feed ships the source
+# in-tree at a fixed version, so it applies with zero fuzz. Idempotent; fails the
+# build loudly if it cannot apply (e.g. upstream bumped quectel-cm) rather than
+# silently shipping stock.
+quectel_cm_dir="feeds/nss_packages/wwan/utils/quectel-cm"
+qcm_patch="$BUILDER_REPO/package-patches/quectel-cm/950-ipv6-cgact-race.patch"
+if [[ -f "$qcm_patch" ]] && ! grep -q 'QUECTEL_V6_RACE_MAX' "$quectel_cm_dir/src/QMIThread.c" 2>/dev/null; then
+  log::info "Applying quectel-cm IPv6 CGACT-race patch"
+  patch -p1 -d "$quectel_cm_dir" <"$qcm_patch"
+  sed -i 's/^PKG_RELEASE:=4$/PKG_RELEASE:=5/' "$quectel_cm_mk"
+fi
+
 # 3. Drop in device .config and resolve.
 log::info "Loading device config: $DEVICE_DIR/config"
 cp "$BUILDER_REPO/$DEVICE_DIR/config" .config

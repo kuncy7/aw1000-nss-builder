@@ -29,10 +29,13 @@ config interface 'wan'
 	option delay '15'
 
 # === PROFIL B: IPv6-only + 464xlat (recepta alula) =========================
-# UWAGA: przed przelaczeniem rodziny adresow wykonac NA MODEMIE:
-#   echo -e 'AT+QCFG="ResetFactory"\r' > /dev/ttyUSB2   (lub ttyUSB3)
-#   i zrestartowac modem. Bez tego: verbose 241.
-# Po przelaczeniu NIE wracac na Profil A bez ponownego ResetFactory.
+# ResetFactory NIE jest juz potrzebny: zalatany quectel-cm (PKG_RELEASE 5,
+# package-patches/quectel-cm/950-ipv6-cgact-race.patch) wygrywa wyscig CGACT na
+# split-PDN Orange (deaktywuje auto-aktywowany PDN IPv6 i ponawia START az trafi
+# w okno <2s), wiec verbose 241 nie blokuje polaczenia. Modem IPv6-only -> IPv4
+# klientow idzie przez 464xlat (CLAT, NAT64/DNS64).
+# multiplexing '1' => quectel.sh dzwoni `-m 1` (wwan0_1, muxid 0x81 — jedyny mux
+# qmap_mode=1) dla IPv6-only.
 # Aby uzyc: zakomentowac caly Profil A powyzej, odkomentowac ponizsze,
 # nastepnie: /etc/init.d/network restart
 #
@@ -42,8 +45,10 @@ config interface 'wan'
 # 	option pdptype 'ipv6'
 # 	option apn 'internetipv6'
 # 	option auth 'none'
+# 	option multiplexing '1'
 # 	option delay '15'
 #
 # config interface 'clat'
 # 	option proto '464xlat'
+# 	option tunlink 'wan'
 # ===========================================================================
