@@ -28,7 +28,7 @@ config interface 'wan'
 	option auth 'none'
 	option delay '15'
 
-# === PROFIL B: IPv6-only + 464xlat (recepta alula) =========================
+# === PROFIL B: IPv6-only + 464xlat (recepta alula) — OPCJA (domyslny = A) =====
 # ResetFactory NIE jest juz potrzebny: zalatany quectel-cm (PKG_RELEASE 5,
 # package-patches/quectel-cm/950-ipv6-cgact-race.patch) wygrywa wyscig CGACT na
 # split-PDN Orange (deaktywuje auto-aktywowany PDN IPv6 i ponawia START az trafi
@@ -36,8 +36,14 @@ config interface 'wan'
 # klientow idzie przez 464xlat (CLAT, NAT64/DNS64).
 # multiplexing '1' => quectel.sh dzwoni `-m 1` (wwan0_1, muxid 0x81 — jedyny mux
 # qmap_mode=1) dla IPv6-only.
-# Aby uzyc: zakomentowac caly Profil A powyzej, odkomentowac ponizsze,
-# nastepnie: /etc/init.d/network restart
+# CLAT JEST AUTO-SPAWNOWANY: odhcp6c sam tworzy dynamiczny interfejs wan_6_4
+# (464-wan_6_4) gdy wan_6 jest dhcpv6 -> NIE dawac wlasnego `config interface
+# clat` (zbedny, leci up:false bo prefiks jest na wan_6 nie wan; explicit+auto
+# moga flapowac). Wystarczy ponizszy wan.
+# Aby uzyc: zakomentowac caly Profil A powyzej, odkomentowac ponizsze, potem
+# ZREBOOTOWAC (NIE `network restart`! Na cieplym modemie Orange trzyma PDN IPv6
+# i wyscig CGACT nie wygrywa -> 241 w petli, a Profil A juz zdjety = brak lacza;
+# tylko cold boot daje czyste okno).
 #
 # config interface 'wan'
 # 	option proto 'quectel'
@@ -47,8 +53,4 @@ config interface 'wan'
 # 	option auth 'none'
 # 	option multiplexing '1'
 # 	option delay '15'
-#
-# config interface 'clat'
-# 	option proto '464xlat'
-# 	option tunlink 'wan'
 # ===========================================================================
