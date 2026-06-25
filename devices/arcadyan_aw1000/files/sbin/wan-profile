@@ -1,0 +1,87 @@
+#!/bin/sh
+# wan-profile — przelacza uplink modemu AW1000 miedzy profilem:
+#   A = IPv4         (apn internet,     pdptype ipv4)
+#   B = IPv6 + CLAT  (apn internetipv6, pdptype ipv6, multiplexing 1; auto-464xlat)
+#
+# Uzycie: wan-profile [a|b|toggle|status] [-y]
+#   bez argumentu  -> toggle
+#   -y             -> reboot bez pytania
+#
+# Kopie konfiguracji (NIE timestampowane, nadpisywane):
+#   /etc/config/network.ipv4  = ostatni stan profilu A
+#   /etc/config/network.ipv6  = ostatni stan profilu B
+#
+# UWAGA: zmiana wymaga COLD BOOT. `network restart` NIE przelacza A<->B
+# (cieply modem trzyma PDN -> petla 241 -> utrata lacza i SSH). Tylko reboot.
+
+set -e
+
+SNAP_A=/etc/config/network.ipv4
+SNAP_B=/etc/config/network.ipv6
+
+cur_pdp=$(uci -q get network.wan.pdptype || echo ipv4)
+case "$cur_pdp" in ipv6) cur=B ;; *) cur=A ;; esac
+
+target="${1:-toggle}"
+auto=0
+[ "$2" = "-y" ] && auto=1
+[ "$1" = "-y" ] && { auto=1; target=toggle; }
+
+case "$target" in
+    a|A) want=A ;;
+    b|B) want=B ;;
+    toggle) [ "$cur" = A ] && want=B || want=A ;;
+    status)
+        echo "Profil: $cur   (pdptype=$cur_pdp apn=$(uci -q get network.wan.apn))"
+        exit 0 ;;
+    *) echo "Uzycie: wan-profile [a|b|toggle|status] [-y]"; exit 1 ;;
+esac
+
+if [ "$cur" = "$want" ]; then
+    echo "Juz na profilu $want — nic do zrobienia."
+    exit 0
+fi
+
+# snapshot biezacego stanu do pliku nazwanego wg biezacego profilu
+if [ "$cur" = A ]; then
+    cp /etc/config/network "$SNAP_A"; echo "Zapisano profil A -> $SNAP_A"
+else
+    cp /etc/config/network "$SNAP_B"; echo "Zapisano profil B -> $SNAP_B"
+fi
+
+if [ "$want" = B ]; then
+    uci set network.wan.pdptype='ipv6'
+    uci set network.wan.apn='internetipv6'
+    uci set network.wan.multiplexing='1'
+    uci -q delete network.wan.multipath
+    uci -q delete network.wan_6          # lewy statyczny wan_6 (proto dhcp) blokuje dynamiczny dhcpv6/CLAT
+    uci commit network
+    # RA dla LAN: tylko other-config (bez flagi M=managed) + SLAAC, by klienci
+    # dostali zmienny /64 z modemu przez SLAAC, a nie czekali na stateful DHCPv6
+    uci -q delete dhcp.lan.ra_flags
+    uci add_list dhcp.lan.ra_flags='other-config'
+    uci set dhcp.lan.ra='server'
+    uci set dhcp.lan.ra_slaac='1'
+    uci commit dhcp
+    echo "-> Profil B: IPv6 + auto-CLAT (apn internetipv6, multiplexing 1) + RA/SLAAC dla LAN"
+else
+    uci set network.wan.pdptype='ipv4'
+    uci set network.wan.apn='internet'
+    uci set network.wan.multipath='off'
+    uci -q delete network.wan.multiplexing
+    uci commit network
+    echo "-> Profil A: IPv4 (apn internet)"
+fi
+
+echo
+echo "Zmiana zapisana. Wymagany COLD BOOT (network restart NIE zadziala)."
+if [ "$auto" = 1 ]; then
+    echo "Reboot..."; reboot
+else
+    printf "Zrestartowac teraz? [t/N] "
+    read ans 2>/dev/null || ans=N
+    case "$ans" in
+        t|T|y|Y) echo "Reboot..."; reboot ;;
+        *) echo "Pominieto reboot — zmiana wejdzie po nastepnym recznym 'reboot'." ;;
+    esac
+fi
