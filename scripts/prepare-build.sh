@@ -143,59 +143,13 @@ for qqw_dir in feeds/nss_packages/wwan/driver/quectel-qmi-wwan feeds/wwan/wwan/d
   fi
 done
 
-# 2b. nat46 + qca-nss-ecm MAP-T.
-# The EDMA tree's nat46 is plain upstream ayourtch/nat46: it neither stages its
-# headers nor exports the QCA MAP-T API (is_map_t_dev, xlate_*, nat46_get_rule_config,
-# …) that qca-nss-ecm's MAP-T path (enabled whenever kmod-nat46 is selected) needs.
-# Add both so 464xlat builds — and, once the qca-nss-clients map-t connmgr is built,
-# can be NSS-offloaded. The MAP-T export patch is the QCA "Export APIs for
-# acceleration engine" patch; the underlying functions it wraps (pairs_xlate_*,
-# netdev_nat46_instance, nat46_xlate_rulepair_t) still exist by the same names in
-# the current nat46, so it applies onto the current version (no old-version pin).
-nat46_pkg="package/kernel/nat46"
-if [[ -d "$nat46_pkg" ]]; then
-  nat46_patch_src="$BUILDER_REPO/package-patches/nat46"
-  if compgen -G "$nat46_patch_src/*.patch" >/dev/null; then
-    log::info "Adding nat46 patches (qca-nss-ecm MAP-T dependency)"
-    mkdir -p "$nat46_pkg/patches"
-    cp "$nat46_patch_src"/*.patch "$nat46_pkg/patches/"
-  fi
-
-  # Stage nat46 headers so qca-nss-ecm can #include <nat46-core.h>. Upstream nat46
-  # has no Build/InstallDev; insert one before the KernelPackage eval. Idempotent.
-  nat46_mk="$nat46_pkg/Makefile"
-  if [[ -f "$nat46_mk" ]] && ! grep -q 'Build/InstallDev' "$nat46_mk"; then
-    log::info "Adding Build/InstallDev (stage nat46 headers) to $nat46_mk"
-    awk '
-      /^\$\(eval \$\(call KernelPackage,nat46\)\)/ {
-        print "define Build/InstallDev"
-        print "\t$(INSTALL_DIR) $(STAGING_DIR)/usr/include/nat46"
-        print "\t$(INSTALL_DATA) $(PKG_BUILD_DIR)/nat46/modules/*.h $(STAGING_DIR)/usr/include/nat46/"
-        print "endef"
-        print ""
-      }
-      { print }
-    ' "$nat46_mk" >"$nat46_mk.tmp" && mv "$nat46_mk.tmp" "$nat46_mk"
-  fi
-
-  # Export nat46's exported symbols (is_map_t_dev) to other modules. nat46 builds
-  # in nat46/modules/, so its Module.symvers lands there — but OpenWrt copies the
-  # shared symvers from $(PKG_BUILD_DIR)/Module.symvers. Without this copy the
-  # symbol is in nat46's own symvers yet ABSENT from the one qca-nss-ecm links
-  # against -> "modpost: is_map_t_dev undefined". Append the copy to Build/Compile
-  # (before its endef). Idempotent.
-  if [[ -f "$nat46_mk" ]] && ! grep -qF 'nat46/modules/Module.symvers $(PKG_BUILD_DIR)/Module.symvers' "$nat46_mk"; then
-    log::info "Adding Module.symvers copy to nat46 Build/Compile in $nat46_mk"
-    awk '
-      /^define Build\/Compile$/ { incompile=1 }
-      incompile && /^endef$/ {
-        print "\t$(INSTALL_DATA) $(PKG_BUILD_DIR)/nat46/modules/Module.symvers $(PKG_BUILD_DIR)/Module.symvers"
-        incompile=0
-      }
-      { print }
-    ' "$nat46_mk" >"$nat46_mk.tmp" && mv "$nat46_mk.tmp" "$nat46_mk"
-  fi
-fi
+# 2b. nat46 + qca-nss-ecm MAP-T — NOW UPSTREAM IN THE EDMA TREE (no longer injected).
+# Our fix was merged into JuliusBairaktaris/openwrt-nss-edma (commit b8a0af308e,
+# "nat46: stage headers and add QCA MAP-T exports for ECM offload"): the tree's
+# nat46 now ships Build/InstallDev, the Module.symvers copy, AND the full QCA MAP-T
+# patch stack (102-mapt etc.). Re-adding our own export patch here would collide
+# with that 102-mapt.patch (duplicate EXPORT_SYMBOLs), so this step is intentionally
+# removed. The connmgr injection below (2c) builds against the tree's nat46 API.
 
 # 2c. qca-nss-clients: add the MAP-T connection manager subpackage.
 # The EDMA tree's qca-nss-clients ships the map/map-t/ source but defines no
