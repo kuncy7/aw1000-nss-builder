@@ -1,0 +1,46 @@
+--- a/src/core/mhi_init.c	2026-07-03 21:24:49.763562478 +0200
++++ b/src/core/mhi_init.c	2026-07-03 21:25:21.870212678 +0200
+@@ -644,11 +644,9 @@
+ static const struct file_operations mon_fops_text_u = {
+ 	.owner =	THIS_MODULE,
+ 	.open =		mon_text_open,
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0))
+-	.llseek =	no_llseek,
+-#else
++	/* no_llseek was removed from the VFS in 6.15; noop_llseek is valid on
++	 * all supported kernels and preserves the pre-6.14 behaviour. */
+ 	.llseek =	noop_llseek,
+-#endif
+ 	.read =		mon_text_read_u,
+ 	.release =	mon_text_release,
+ };
+--- a/src/devices/mhi_netdev_quectel.c	2026-07-03 21:24:49.770562620 +0200
++++ b/src/devices/mhi_netdev_quectel.c	2026-07-03 21:25:35.401486716 +0200
+@@ -1655,8 +1655,12 @@
+ 
+ 	priv->agg_skb = NULL;
+ 	priv->agg_count = 0;
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,18,0))
+ 	hrtimer_init(&priv->agg_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+ 	priv->agg_hrtimer.function = rmnet_vnd_tx_agg_timer_cb;
++#else
++	hrtimer_setup(&priv->agg_hrtimer, rmnet_vnd_tx_agg_timer_cb, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
++#endif
+ 	INIT_WORK(&priv->agg_wq, rmnet_vnd_tx_agg_work);
+ 	ktime_get_ts64(&priv->agg_time);
+ 	spin_lock_init(&priv->agg_lock);
+--- a/src/devices/rmnet/rmnet_map_data.c	2026-07-03 21:24:49.775562721 +0200
++++ b/src/devices/rmnet/rmnet_map_data.c	2026-07-03 21:25:46.068702756 +0200
+@@ -649,8 +649,12 @@
+ 
+ static void rmnet_map_tx_aggregate_init(struct rmnet_port *port)
+ {
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,18,0))
+ 	hrtimer_init(&port->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+ 	port->hrtimer.function = rmnet_map_flush_tx_packet_queue;
++#else
++	hrtimer_setup(&port->hrtimer, rmnet_map_flush_tx_packet_queue, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
++#endif
+ 	port->egress_agg_params.agg_size = 8192;
+ 	port->egress_agg_params.agg_count = 20;
+ 	port->egress_agg_params.agg_time = 3000000;

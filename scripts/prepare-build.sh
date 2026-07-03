@@ -173,6 +173,23 @@ for rmnet_dir in feeds/nss_packages/wwan/driver/rmnet-nss feeds/wwan/wwan/driver
   fi
 done
 
+# 2a-quater. quectel-mhi-pcie (PCIe/M.2 modem driver): two 6.18 breakages.
+# (1) The VFS no_llseek helper was removed (gone since 6.15); the feed's mon
+# fops guards it behind a backwards `>= 6.14 ? no_llseek : noop_llseek` check,
+# so 6.18 references the removed symbol. Replaced with noop_llseek (valid on
+# all supported kernels; same behaviour the < 6.14 branch gave on 6.12).
+# (2) hrtimer_init() was replaced by hrtimer_setup() (mhi_netdev_quectel.c and
+# rmnet/rmnet_map_data.c), version-gated < 6.18 like quectel-qmi-wwan.
+mhi_618_patch="$BUILDER_REPO/package-patches/quectel-mhi-pcie/950-kernel-6.18-port.patch"
+for mhi_dir in feeds/nss_packages/wwan/driver/quectel-mhi-pcie feeds/wwan/wwan/driver/quectel-mhi-pcie; do
+  [[ -d "$mhi_dir" ]] || continue
+  if [[ -f "$mhi_618_patch" ]] && ! grep -q 'noop_llseek is valid on' "$mhi_dir/src/core/mhi_init.c" 2>/dev/null; then
+    log::info "Applying quectel-mhi-pcie kernel-6.18 port patch"
+    patch -p1 -d "$mhi_dir" <"$mhi_618_patch"
+    sed -i 's/^PKG_RELEASE:=3$/PKG_RELEASE:=4/' "$mhi_dir/Makefile"
+  fi
+done
+
 # 2b. nat46 + qca-nss-ecm MAP-T — NOW UPSTREAM IN THE EDMA TREE (no longer injected).
 # Our fix was merged into JuliusBairaktaris/openwrt-nss-edma (commit b8a0af308e,
 # "nat46: stage headers and add QCA MAP-T exports for ECM offload"): the tree's
