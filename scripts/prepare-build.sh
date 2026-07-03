@@ -86,6 +86,15 @@ done <<<"$FEEDS_LINES"
 log::info "Installing all remaining packages"
 ./scripts/feeds install -a
 
+# Guard: qca-mcs is the one package duplicated between the nss feed (QSDK 14.0,
+# kernel-6.18-ready) and the wwan feed (stale 12.5 copy that fails on 6.18 with
+# implicit try_to_del_timer_sync). nss-tools hard-depends on kmod-qca-mcs, so a
+# wrong resolution bricks the build an hour in — fail fast here instead.
+if [[ -e package/feeds/wwan/qca-mcs ]]; then
+  log::error "qca-mcs resolved from the wwan feed (stale 12.5); expected the nss feed"
+  exit 1
+fi
+
 # 2a. Per-package post-install fixes for upstream incompatibilities.
 # The wwan packages live in feeds/nss_packages/wwan/ on the qosmio layout
 # (nss_packages IS the wwan repo there) and in feeds/wwan/wwan/ when the wwan
