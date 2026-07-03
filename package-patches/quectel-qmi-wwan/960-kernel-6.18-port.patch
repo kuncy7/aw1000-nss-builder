@@ -1,0 +1,74 @@
+--- a/src/qmi_wwan_q.c	2026-07-03 17:57:52.397991573 +0200
++++ b/src/qmi_wwan_q.c	2026-07-03 17:58:38.931800202 +0200
+@@ -178,7 +178,11 @@
+ #if defined(QUECTEL_UL_DATA_AGG)
+ 	struct tx_agg_ctx tx_ctx;
+ 	struct tasklet_struct	txq;
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,18,0))
+ 	struct tasklet_struct usbnet_bh;
++#else
++	work_func_t usbnet_bh_func;
++#endif
+ #endif
+ 
+ #ifdef QUECTEL_BRIDGE_MODE
+@@ -887,6 +891,7 @@
+ #endif
+ 
+ #if defined(QUECTEL_UL_DATA_AGG)
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,18,0))
+ static void usbnet_bh(unsigned long data) {
+ 	sQmiWwanQmap *pQmapDev = (sQmiWwanQmap *)data;
+ 	struct tasklet_struct *t = &pQmapDev->usbnet_bh;
+@@ -905,6 +910,24 @@
+ 		qmap_wake_queue((sQmiWwanQmap *)data);
+ 	}
+ }
++#else
++/* 6.18: usbnet's bottom half migrated from a tasklet (dev->bh) to a
++ * work_struct (dev->bh_work). We hijack it the same way: save the original
++ * work function, install ours, chain to the original, then wake the qmap
++ * TX queue for UL aggregation flow control. */
++static void usbnet_bh(struct work_struct *work) {
++	struct usbnet *dev = container_of(work, struct usbnet, bh_work);
++	struct qmi_wwan_state *info = (struct qmi_wwan_state *)&dev->data;
++	sQmiWwanQmap *pQmapDev = (sQmiWwanQmap *)info->unused;
++
++	if (pQmapDev && pQmapDev->usbnet_bh_func)
++		pQmapDev->usbnet_bh_func(work);
++
++	if (pQmapDev && !netif_queue_stopped(dev->net)) {
++		qmap_wake_queue(pQmapDev);
++	}
++}
++#endif
+ 
+ static void rmnet_usb_tx_wake_queue(unsigned long data) {
+ 	qmap_wake_queue((sQmiWwanQmap *)data);
+@@ -1424,8 +1447,12 @@
+ #endif
+ 	priv->agg_skb = NULL;
+ 	priv->agg_count = 0;
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,18,0))
+ 	hrtimer_init(&priv->agg_hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+ 	priv->agg_hrtimer.function = rmnet_usb_tx_agg_timer_cb;
++#else
++	hrtimer_setup(&priv->agg_hrtimer, rmnet_usb_tx_agg_timer_cb, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
++#endif
+ 	INIT_WORK(&priv->agg_wq, rmnet_usb_tx_agg_work);
+ 	ktime_get_ts64(&priv->agg_time);
+ 	spin_lock_init(&priv->agg_lock);
+@@ -2321,8 +2348,13 @@
+ 				}
+ 
+ 				if (pQmapDev->use_rmnet_usb && !one_card_mode) {
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,18,0))
+ 					pQmapDev->usbnet_bh = dev->bh;
+ 					tasklet_init(&dev->bh, usbnet_bh, (unsigned long)pQmapDev);
++#else
++					pQmapDev->usbnet_bh_func = dev->bh_work.func;
++					INIT_WORK(&dev->bh_work, usbnet_bh);
++#endif
+ 				}
+ 			}
+ 		}

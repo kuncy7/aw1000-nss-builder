@@ -134,12 +134,42 @@ done
 # This removes the need for the modem-up qmi_wwan_q reload hack. Idempotent;
 # fails loudly if it cannot apply (e.g. upstream bumped quectel-qmi-wwan).
 qqw_patch="$BUILDER_REPO/package-patches/quectel-qmi-wwan/950-rmnet-nss-deferred-attach.patch"
+qqw_618_patch="$BUILDER_REPO/package-patches/quectel-qmi-wwan/960-kernel-6.18-port.patch"
 for qqw_dir in feeds/nss_packages/wwan/driver/quectel-qmi-wwan feeds/wwan/wwan/driver/quectel-qmi-wwan; do
   [[ -d "$qqw_dir" ]] || continue
   if [[ -f "$qqw_patch" ]] && ! grep -q 'qmap_nss_retry_work' "$qqw_dir/src/qmi_wwan_q.c" 2>/dev/null; then
     log::info "Applying quectel-qmi-wwan rmnet->NSS deferred-attach patch"
     patch -p1 -d "$qqw_dir" <"$qqw_patch"
     sed -i 's/^PKG_RELEASE:=2$/PKG_RELEASE:=3/' "$qqw_dir/Makefile"
+  fi
+
+  # Kernel 6.18 port. qmi_wwan_q hijacks usbnet's bottom half, which migrated
+  # from a tasklet (dev->bh) to a work_struct (dev->bh_work) in 6.18; it also
+  # calls hrtimer_init(), replaced by hrtimer_setup(). The patch version-gates
+  # both (< 6.18 path untouched). It also adds KCFLAGS to Build/Compile: 6.18
+  # kbuild dropped command-line EXTRA_CFLAGS from _c_flags, so the
+  # -I qca-nss-rmnet include and -DCONFIG_QCA_NSS_DRV define would be silently
+  # lost (NSS path compiled out). Must run after the deferred-attach patch.
+  if [[ -f "$qqw_618_patch" ]] && ! grep -q 'usbnet_bh_func' "$qqw_dir/src/qmi_wwan_q.c" 2>/dev/null; then
+    log::info "Applying quectel-qmi-wwan kernel-6.18 port patch"
+    patch -p1 -d "$qqw_dir" <"$qqw_618_patch"
+    # shellcheck disable=SC2016  # $(EXTRA_CFLAGS) is a make variable, not shell
+    grep -q KCFLAGS "$qqw_dir/Makefile" || \
+      sed -i 's|EXTRA_CFLAGS="$(EXTRA_CFLAGS)" M=|EXTRA_CFLAGS="$(EXTRA_CFLAGS)" KCFLAGS="$(EXTRA_CFLAGS)" M=|' "$qqw_dir/Makefile"
+    sed -i 's/^PKG_RELEASE:=3$/PKG_RELEASE:=4/' "$qqw_dir/Makefile"
+  fi
+done
+
+# 2a-ter. rmnet-nss: same 6.18 EXTRA_CFLAGS drop. Without KCFLAGS the
+# -I qca-nss-drv include is lost and nss_api_if.h isn't found (hard build
+# failure). KCFLAGS carries the include via KBUILD_CFLAGS instead.
+for rmnet_dir in feeds/nss_packages/wwan/driver/rmnet-nss feeds/wwan/wwan/driver/rmnet-nss; do
+  [[ -d "$rmnet_dir" ]] || continue
+  rmnet_mk="$rmnet_dir/Makefile"
+  if [[ -f "$rmnet_mk" ]] && ! grep -q KCFLAGS "$rmnet_mk"; then
+    log::info "Adding KCFLAGS to $rmnet_mk for kernel 6.18"
+    # shellcheck disable=SC2016  # $(EXTRA_CFLAGS) is a make variable, not shell
+    sed -i 's|EXTRA_CFLAGS="$(EXTRA_CFLAGS)" M=|EXTRA_CFLAGS="$(EXTRA_CFLAGS)" KCFLAGS="$(EXTRA_CFLAGS)" M=|' "$rmnet_mk"
   fi
 done
 
@@ -150,6 +180,11 @@ done
 # patch stack (102-mapt etc.). Re-adding our own export patch here would collide
 # with that 102-mapt.patch (duplicate EXPORT_SYMBOLs), so this step is intentionally
 # removed. The connmgr injection below (2c) builds against the tree's nat46 API.
+# One nat46 fix IS still ours, applied as a tree patch in section 1:
+# patches/010-nat46-pkg-extmod-subdirs-6.18.patch adds PKG_EXTMOD_SUBDIRS so the
+# 6.18 symvers collector finds nat46's exports (it builds in the nat46/modules
+# subdir). Without it symvers/nat46.symvers stages empty and the connmgr below
+# fails modpost with undefined nat46 symbols. Upstreamable to OpenWrt.
 
 # 2c. qca-nss-clients: add the MAP-T connection manager subpackage.
 # The EDMA tree's qca-nss-clients ships the map/map-t/ source but defines no
