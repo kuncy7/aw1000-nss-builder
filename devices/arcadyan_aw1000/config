@@ -171,9 +171,7 @@ CONFIG_NSS_DRV_RMNET_ENABLE=y
 CONFIG_PACKAGE_kmod-rmnet-nss=y
 CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
 CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel=y
-CONFIG_PACKAGE_kmod-quectel-mhi-pcie=y
 CONFIG_PACKAGE_quectel-cm=y
-CONFIG_PACKAGE_luci-app-pcimodem=y
 CONFIG_PACKAGE_luci-proto-quectel=y
 
 ## WireGuard

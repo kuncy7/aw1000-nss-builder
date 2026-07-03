@@ -69,7 +69,7 @@ log::info "Updating all feeds"
 # would shadow the Julius edma-nss versions if force-installed with `-p -a`.
 # Install only the modem packages from it; everything else resolves from the
 # nss feed (listed earlier in feeds.conf, so it wins for duplicates).
-WWAN_PACKAGES="quectel-cm luci-proto-quectel luci-app-pcimodem kmod-rmnet-nss kmod-quectel-mhi-pcie kmod-usb-net-qmi-wwan-quectel"
+WWAN_PACKAGES="quectel-cm luci-proto-quectel kmod-rmnet-nss kmod-usb-net-qmi-wwan-quectel"
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   feed_name="$(awk '{print $2}' <<<"$line")"
