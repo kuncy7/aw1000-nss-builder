@@ -206,11 +206,11 @@ done
 # patch stack (102-mapt etc.). Re-adding our own export patch here would collide
 # with that 102-mapt.patch (duplicate EXPORT_SYMBOLs), so this step is intentionally
 # removed. The connmgr injection below (2c) builds against the tree's nat46 API.
-# One nat46 fix IS still ours, applied as a tree patch in section 1:
-# patches/010-nat46-pkg-extmod-subdirs-6.18.patch adds PKG_EXTMOD_SUBDIRS so the
-# 6.18 symvers collector finds nat46's exports (it builds in the nat46/modules
-# subdir). Without it symvers/nat46.symvers stages empty and the connmgr below
-# fails modpost with undefined nat46 symbols. Upstreamable to OpenWrt.
+# The second nat46 fix (PKG_EXTMOD_SUBDIRS:=nat46/modules, our 6.18 symvers
+# collector fix) is ALSO upstream now — adopted into the EDMA tree by 2026-07-08
+# (nat46 Makefile carries it with its own comment), so the former
+# patches/010-nat46-pkg-extmod-subdirs-6.18.patch was dropped: re-applying it
+# would fail `git apply` and abort section 1.
 
 # 2c. qca-nss-clients: add the MAP-T connection manager subpackage.
 # The EDMA tree's qca-nss-clients ships the map/map-t/ source but defines no
