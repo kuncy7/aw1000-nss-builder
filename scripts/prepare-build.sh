@@ -212,6 +212,25 @@ done
 # patches/010-nat46-pkg-extmod-subdirs-6.18.patch was dropped: re-applying it
 # would fail `git apply` and abort section 1.
 
+# 2b-bis. qca-nss-ecm: enable the RAWIP interface type for OUR modem driver.
+# rmnet netdevs are ARPHRD_RAWIP; without ECM_INTERFACE_RAWIP_ENABLE the ECM
+# cannot build the interface hierarchy down to rmnet and modem flows are never
+# accelerated (they still forward, just on the CPU). The EDMA feed gates the
+# flag on CONFIG_PACKAGE_kmod-qmi_wwan_q — the QModem driver's package name —
+# but our driver from the wwan feed is kmod-usb-net-qmi-wwan-quectel, so the
+# gate never fires on this builder. Widen it to match both names. Idempotent.
+# (Spotted thanks to divinecougar/ozgunokan's QModem-NSS AW1000 build, which
+# force-enables the same flag via an ECM source patch.)
+ecm_mk="feeds/nss/qca-nss-ecm/Makefile"
+if [[ -f "$ecm_mk" ]] && ! grep -q 'kmod-usb-net-qmi-wwan-quectel' "$ecm_mk"; then
+  log::info "Widening the ECM RAWIP gate to kmod-usb-net-qmi-wwan-quectel"
+  sed -i 's|^ifneq ($(CONFIG_PACKAGE_kmod-qmi_wwan_q),)$|ifneq ($(CONFIG_PACKAGE_kmod-qmi_wwan_q)$(CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel),)|' "$ecm_mk"
+  grep -q 'kmod-usb-net-qmi-wwan-quectel' "$ecm_mk" || {
+    log::error "ECM RAWIP gate not found — upstream Makefile changed, RAWIP would stay off"
+    exit 1
+  }
+fi
+
 # 2c. qca-nss-clients: add the MAP-T connection manager subpackage.
 # The EDMA tree's qca-nss-clients ships the map/map-t/ source but defines no
 # KernelPackage for it (only pppoe/qdisc/igs). Inject kmod-qca-nss-drv-map-t:
