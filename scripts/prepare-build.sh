@@ -212,23 +212,28 @@ done
 # patches/010-nat46-pkg-extmod-subdirs-6.18.patch was dropped: re-applying it
 # would fail `git apply` and abort section 1.
 
-# 2b-bis. qca-nss-ecm: enable the RAWIP interface type for OUR modem driver.
+# 2b-bis. qca-nss-ecm: enable the RAWIP interface type for our modem driver.
 # rmnet netdevs are ARPHRD_RAWIP; without ECM_INTERFACE_RAWIP_ENABLE the ECM
 # cannot build the interface hierarchy down to rmnet and modem flows are never
-# accelerated (they still forward, just on the CPU). The EDMA feed gates the
-# flag on CONFIG_PACKAGE_kmod-qmi_wwan_q — the QModem driver's package name —
-# but our driver from the wwan feed is kmod-usb-net-qmi-wwan-quectel, so the
-# gate never fires on this builder. Widen it to match both names. Idempotent.
-# (Spotted thanks to divinecougar/ozgunokan's QModem-NSS AW1000 build, which
-# force-enables the same flag via an ECM source patch.)
+# accelerated (they still forward, just on the CPU). Upstream first gated the
+# flag on CONFIG_PACKAGE_kmod-qmi_wwan_q (the QModem driver name, never ours),
+# then removed RAWIP altogether in "force off the interface types we do not
+# validate" (0df7134) — Julius has no cellular hardware; we validated rmnet
+# offload on the AW1000 in June. Append the flag as our own block instead of
+# editing his lines: make expands ECM_MAKE_OPTS when the compile recipe runs,
+# so an appended += anywhere in the Makefile works and survives upstream
+# refactors. Idempotent.
+# (RAWIP requirement confirmed independently by divinecougar/ozgunokan's
+# QModem-NSS AW1000 build, which force-enables the same flag in ECM source.)
 ecm_mk="feeds/nss/qca-nss-ecm/Makefile"
-if [[ -f "$ecm_mk" ]] && ! grep -q 'kmod-usb-net-qmi-wwan-quectel' "$ecm_mk"; then
-  log::info "Widening the ECM RAWIP gate to kmod-usb-net-qmi-wwan-quectel"
-  sed -i 's|^ifneq ($(CONFIG_PACKAGE_kmod-qmi_wwan_q),)$|ifneq ($(CONFIG_PACKAGE_kmod-qmi_wwan_q)$(CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel),)|' "$ecm_mk"
-  grep -q 'kmod-usb-net-qmi-wwan-quectel' "$ecm_mk" || {
-    log::error "ECM RAWIP gate not found — upstream Makefile changed, RAWIP would stay off"
-    exit 1
-  }
+if [[ -f "$ecm_mk" ]] && ! grep -q 'ECM_INTERFACE_RAWIP_ENABLE=y' "$ecm_mk"; then
+  log::info "Enabling ECM RAWIP interface support (rmnet offload)"
+  cat >>"$ecm_mk" <<'EOF'
+
+# aw1000-nss-builder: rmnet (ARPHRD_RAWIP) offload for the USB QMI modem —
+# validated on AW1000 hardware; upstream forces it off as never-validated.
+ECM_MAKE_OPTS+=ECM_INTERFACE_RAWIP_ENABLE=y
+EOF
 fi
 
 # 2c. qca-nss-clients: add the MAP-T connection manager subpackage.
