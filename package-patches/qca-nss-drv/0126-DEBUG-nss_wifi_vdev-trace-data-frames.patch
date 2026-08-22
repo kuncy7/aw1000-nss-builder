@@ -1,0 +1,31 @@
+DEBUG E40 - jak 0126, ale z podgladem naglowka ramki. E39: ostatnia
+rzecz przed smiercia rdzenia UBI32 to ramka danych len=20 proto=0x0004
+wyslana 9 ms po peer_create stacji (wczesniejsze ramki 174 B IPv6 RA
+byly nieszkodliwe). Trzeba zobaczyc jej zawartosc. Nie wysylac.
+
+--- a/nss_wifi_vdev.c
++++ b/nss_wifi_vdev.c
+@@ -209,7 +209,22 @@
+ 		return NSS_TX_FAILURE_NOT_SUPPORTED;
+ 	}
+ 
+-	return nss_core_send_packet(nss_ctx, os_buf, if_num, H2N_BIT_FLAG_BUFFER_REUSABLE);
++	{
++		/* DEBUG E40: slad ramek DANYCH host->wifili z podgladem
++		 * naglowka. E39 pokazal, ze ostatnia rzecza przed smiercia
++		 * rdzenia jest ramka len=20 proto=0x0004 wyslana 9 ms po
++		 * peer_create stacji - chcemy wiedziec, CO to jest.
++		 */
++		static unsigned long n;
++		unsigned int dl = os_buf->len < 32 ? os_buf->len : 32;
++		nss_tx_status_t st = nss_core_send_packet(nss_ctx, os_buf, if_num,
++							  H2N_BIT_FLAG_BUFFER_REUSABLE);
++		if (++n <= 40 || !(n % 50))
++			pr_info("wifili-data: n=%lu if=%u len=%u proto=0x%04x st=%d hdr=%*ph\n",
++				n, if_num, os_buf->len, ntohs(os_buf->protocol), st,
++				dl, os_buf->data);
++		return st;
++	}
+ }
+ EXPORT_SYMBOL(nss_wifi_vdev_tx_buf);
+ 

@@ -1,0 +1,34 @@
+From: Stanislaw Pal <kuncy7@gmail.com>
+Subject: [PATCH] DEBUG: nss_core: trace data buffers coming up from the firmware
+
+The host->firmware direction has been traced for weeks; nothing ever
+logged what the firmware hands back. Log every non-status buffer with
+the interface number it carries, so it is possible to tell whether the
+firmware delivers received frames at all.
+
+DEBUG ONLY - do not submit.
+
+--- a/nss_core.c
++++ b/nss_core.c
+@@ -1065,6 +1065,21 @@
+ 		return;
+ 	}
+ 
++	/* DEBUG: every data buffer the firmware hands up, with the interface
++	 * it claims it belongs to. The status stream is excluded - it is the
++	 * periodic sync and would drown the log. First 40 unconditionally,
++	 * then one in a thousand, so a steady stream stays visible.
++	 */
++	if (buffer_type != N2H_BUFFER_STATUS) {
++		static unsigned long nss_dbg_rx_count;
++
++		if (nss_dbg_rx_count < 40 || (nss_dbg_rx_count % 1000) == 0)
++			pr_info("nss-n2h-data: n=%lu if=%u type=%u len=%u\n",
++				nss_dbg_rx_count, interface_num, buffer_type,
++				nbuf->len);
++		nss_dbg_rx_count++;
++	}
++
+ 	switch (buffer_type) {
+ 	case N2H_BUFFER_PACKET:
+ 		nss_core_handle_buffer_pkt(nss_ctx, interface_num, nbuf, napi, desc->bit_flags, qid, desc->service_code);
