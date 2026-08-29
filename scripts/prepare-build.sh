@@ -109,23 +109,34 @@ log::info "Installing all remaining packages"
 # value, and the mirror 404s). Same story for libnl-nss, which has to match the
 # nssinfo we build from the nss feed. Repoint both, and fail loudly if the
 # repoint does not take.
+#   reinstall - the package exists as a source package elsewhere; put it back
+#               by feeds.conf order (sms-tool then comes from `packages`).
+#   drop      - another feed already ships it inside a different source package
+#               (libnl-nss is built by the nss feed's nss-userspace-oss, which
+#               is installed from nss), so removing the fork's standalone copy
+#               is the whole fix. Reinstalling by name would only find the
+#               fork's copy again — `-p` is a preference, not a restriction.
 repoint_from_wwan() {
-  local pkg="$1" want="${2:-}"
+  local pkg="$1" mode="$2"
   [[ -e "package/feeds/wwan/$pkg" ]] || return 0
-  log::info "Repointing $pkg away from the wwan feed${want:+ (to the $want feed)}"
+  log::info "Repointing $pkg away from the wwan feed ($mode)"
   ./scripts/feeds uninstall "$pkg"
-  if [[ -n "$want" ]]; then
-    ./scripts/feeds install -p "$want" "$pkg"
-  else
-    ./scripts/feeds install "$pkg"
-  fi
+  [[ "$mode" == reinstall ]] && ./scripts/feeds install "$pkg"
   if [[ -e "package/feeds/wwan/$pkg" ]]; then
     log::error "$pkg still resolves from the wwan feed after the repoint"
     exit 1
   fi
+  return 0
 }
-repoint_from_wwan sms-tool
-repoint_from_wwan libnl-nss nss
+repoint_from_wwan sms-tool reinstall
+repoint_from_wwan libnl-nss drop
+
+# libnl-nss must still be available afterwards, from the nss feed's
+# nss-userspace-oss — nssinfo links against it.
+if [[ ! -e package/feeds/nss/nss-userspace-oss ]]; then
+  log::error "nss-userspace-oss is not installed from the nss feed; libnl-nss would be missing"
+  exit 1
+fi
 
 # Guard: qca-mcs is the one package duplicated between the nss feed (QSDK 14.0,
 # kernel-6.18-ready) and the wwan feed (stale 12.5 copy that fails on 6.18 with
