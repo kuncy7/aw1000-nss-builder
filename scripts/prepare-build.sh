@@ -102,6 +102,31 @@ done <<<"$FEEDS_LINES"
 log::info "Installing all remaining packages"
 ./scripts/feeds install -a
 
+# The wwan fork carries copies of packages that belong to other feeds, and
+# `feeds install -p wwan` claims them for dependencies too: quectel-cm now
+# depends on sms-tool, so the fork's 2022 copy won over the packages feed — and
+# that copy no longer builds (its upstream tarball stopped hashing to the pinned
+# value, and the mirror 404s). Same story for libnl-nss, which has to match the
+# nssinfo we build from the nss feed. Repoint both, and fail loudly if the
+# repoint does not take.
+repoint_from_wwan() {
+  local pkg="$1" want="${2:-}"
+  [[ -e "package/feeds/wwan/$pkg" ]] || return 0
+  log::info "Repointing $pkg away from the wwan feed${want:+ (to the $want feed)}"
+  ./scripts/feeds uninstall "$pkg"
+  if [[ -n "$want" ]]; then
+    ./scripts/feeds install -p "$want" "$pkg"
+  else
+    ./scripts/feeds install "$pkg"
+  fi
+  if [[ -e "package/feeds/wwan/$pkg" ]]; then
+    log::error "$pkg still resolves from the wwan feed after the repoint"
+    exit 1
+  fi
+}
+repoint_from_wwan sms-tool
+repoint_from_wwan libnl-nss nss
+
 # Guard: qca-mcs is the one package duplicated between the nss feed (QSDK 14.0,
 # kernel-6.18-ready) and the wwan feed (stale 12.5 copy that fails on 6.18 with
 # implicit try_to_del_timer_sync). nss-tools hard-depends on kmod-qca-mcs, so a
