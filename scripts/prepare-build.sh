@@ -27,6 +27,20 @@ source "$(dirname -- "$0")/lib/log.sh"
 
 COMMON_FILES="${COMMON_FILES:-$BUILDER_REPO/common/files}"
 
+# Bump a package's PKG_RELEASE so a patched package is not confused with the
+# stock one. Reads the current value instead of pinning an expected number: a
+# pinned sed silently no-ops the moment upstream bumps the package, and the
+# image then claims to be stock while carrying our patches.
+pkg_release_bump() {
+  local mk="$1" cur
+  cur="$(sed -n 's/^PKG_RELEASE:=\([0-9]\{1,\}\)$/\1/p' "$mk" | head -1)"
+  if [[ -z "$cur" ]]; then
+    log::warn "no plain numeric PKG_RELEASE in $mk — leaving the version alone"
+    return 0
+  fi
+  sed -i "s/^PKG_RELEASE:=$cur\$/PKG_RELEASE:=$((cur + 1))/" "$mk"
+}
+
 cd "$OPENWRT_DIR"
 
 # 1. Apply patches.
@@ -64,11 +78,13 @@ log::info "Updating all feeds"
 
 # Install each custom feed individually so failures are obvious.
 #
-# Exception: the `wwan` feed (qosmio/nss-packages, wwan branch) also carries
-# its own copies of the NSS core packages (qca-nss-drv, qca-nss-ecm, …) that
-# would shadow the Julius edma-nss versions if force-installed with `-p -a`.
-# Install only the modem packages from it; everything else resolves from the
-# nss feed (listed earlier in feeds.conf, so it wins for duplicates).
+# Exception: the `wwan` feed (a fork of qosmio/nss-packages, see builder.yml)
+# also carries its own copies of the NSS core packages (qca-nss-drv,
+# qca-nss-ecm, …) that would shadow the Julius edma-nss versions if
+# force-installed with `-p -a`. Install only the modem packages from it;
+# everything else resolves from the nss feed (listed earlier in feeds.conf, so
+# it wins for duplicates). This is the hybrid: modem from the wwan fork, the
+# entire NSS data plane from Julius.
 WWAN_PACKAGES="quectel-cm luci-proto-quectel kmod-rmnet-nss kmod-usb-net-qmi-wwan-quectel"
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
@@ -128,23 +144,23 @@ for quectel_cm_dir in feeds/nss_packages/wwan/utils/quectel-cm feeds/wwan/wwan/u
     sed -i '/^include $(INCLUDE_DIR)\/cmake\.mk$/a\\nCMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5' "$quectel_cm_mk"
   fi
 
-  # Fix quectel.sh for ash compatibility (|| assignments were joined on one line).
-  quectel_sh="$quectel_cm_dir/files/quectel.sh"
-  if [[ -f "$quectel_sh" ]]; then
-    log::info "Replacing $quectel_sh with ash-compatible version"
-    cp "$BUILDER_REPO/$DEVICE_DIR/quectel.sh" "$quectel_sh"
-  fi
+  # quectel.sh is NOT replaced any more. Our copy was qosmio's protocol handler
+  # with the ash fix (`||`-joined assignments); the wwan feed now carries
+  # xhikarishii's rewrite (1068 lines vs our 234) with split IPv6/dual-stack
+  # PDP handling, reconnect route flushing and the nat64/PREF64 hook — a strict
+  # superset that does not have the ash defect. Overwriting it would throw all
+  # of that away.
 
   # IPv6 CGACT-race + CFUN=1 patch: deterministic IPv6-only dial on split-PDN
-  # carriers (Orange PL) where a bare quectel-cm -6 hits verbose 241. The feed
-  # ships the source in-tree at a fixed version, so this applies with zero fuzz.
-  # Idempotent (skip if already applied). Fails the build loudly if it can't
-  # apply (e.g. upstream bumped quectel-cm) rather than silently shipping stock.
+  # carriers (Orange PL) where a bare quectel-cm -6 hits verbose 241. Still ours
+  # alone: the wwan feed's IPv6 work fixes PDP/route/APN handling but does not
+  # touch the CGACT activation race. Idempotent (skip if already applied). Fails
+  # the build loudly if it cannot apply rather than silently shipping stock.
   qcm_patch="$BUILDER_REPO/package-patches/quectel-cm/950-ipv6-cgact-race.patch"
   if [[ -f "$qcm_patch" ]] && ! grep -q 'QUECTEL_V6_RACE_MAX' "$quectel_cm_dir/src/QMIThread.c" 2>/dev/null; then
     log::info "Applying quectel-cm IPv6 CGACT-race patch"
     patch -p1 -d "$quectel_cm_dir" <"$qcm_patch"
-    sed -i 's/^PKG_RELEASE:=4$/PKG_RELEASE:=5/' "$quectel_cm_mk"
+    pkg_release_bump "$quectel_cm_mk"
   fi
 done
 
@@ -164,7 +180,7 @@ for qqw_dir in feeds/nss_packages/wwan/driver/quectel-qmi-wwan feeds/wwan/wwan/d
   if [[ -f "$qqw_patch" ]] && ! grep -q 'qmap_nss_retry_work' "$qqw_dir/src/qmi_wwan_q.c" 2>/dev/null; then
     log::info "Applying quectel-qmi-wwan rmnet->NSS deferred-attach patch"
     patch -p1 -d "$qqw_dir" <"$qqw_patch"
-    sed -i 's/^PKG_RELEASE:=2$/PKG_RELEASE:=3/' "$qqw_dir/Makefile"
+    pkg_release_bump "$qqw_dir/Makefile"
   fi
 
   # Kernel 6.18 port. qmi_wwan_q hijacks usbnet's bottom half, which migrated
@@ -180,7 +196,7 @@ for qqw_dir in feeds/nss_packages/wwan/driver/quectel-qmi-wwan feeds/wwan/wwan/d
     # shellcheck disable=SC2016  # $(EXTRA_CFLAGS) is a make variable, not shell
     grep -q KCFLAGS "$qqw_dir/Makefile" || \
       sed -i 's|EXTRA_CFLAGS="$(EXTRA_CFLAGS)" M=|EXTRA_CFLAGS="$(EXTRA_CFLAGS)" KCFLAGS="$(EXTRA_CFLAGS)" M=|' "$qqw_dir/Makefile"
-    sed -i 's/^PKG_RELEASE:=3$/PKG_RELEASE:=4/' "$qqw_dir/Makefile"
+    pkg_release_bump "$qqw_dir/Makefile"
   fi
 done
 
@@ -210,7 +226,7 @@ for mhi_dir in feeds/nss_packages/wwan/driver/quectel-mhi-pcie feeds/wwan/wwan/d
   if [[ -f "$mhi_618_patch" ]] && ! grep -q 'noop_llseek is valid on' "$mhi_dir/src/core/mhi_init.c" 2>/dev/null; then
     log::info "Applying quectel-mhi-pcie kernel-6.18 port patch"
     patch -p1 -d "$mhi_dir" <"$mhi_618_patch"
-    sed -i 's/^PKG_RELEASE:=3$/PKG_RELEASE:=4/' "$mhi_dir/Makefile"
+    pkg_release_bump "$mhi_dir/Makefile"
   fi
 done
 

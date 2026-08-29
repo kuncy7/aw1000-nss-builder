@@ -39,8 +39,16 @@ device: arcadyan_aw1000
 feeds:
   - name: nss
     url: https://github.com/JuliusBairaktaris/nss-packages.git;edma-nss
+  # Modem packages. xhikarishii's aw1000-nss branch forks qosmio's wwan branch
+  # at the exact commit we used to pin (af86012) and adds the cellular work
+  # qosmio has not merged yet (PR qosmio/nss-packages#75, still open): split /
+  # standalone IPv6 PDP, dual-stack profile export, routes flushed on reconnect,
+  # apn6->apn fallback, a rewritten quectel.sh protocol handler and the
+  # nat64/PREF64 RA hook. Named after this device. Our own patches still apply
+  # on top (verified): the CGACT race, the rmnet->NSS deferred attach and the
+  # 6.18 ports — he does not touch quectel-qmi-wwan, rmnet-nss or mhi-pcie.
   - name: wwan
-    url: https://github.com/qosmio/nss-packages.git;NSS-12.5-K6.x-wwan
+    url: https://github.com/xhikarishii/nss-packages.git;aw1000-nss
   - name: qosmio
     url: https://github.com/qosmio/packages-extra
   - name: iceg_modemdata
