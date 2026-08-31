@@ -85,14 +85,30 @@ log::info "Updating all feeds"
 # everything else resolves from the nss feed (listed earlier in feeds.conf, so
 # it wins for duplicates). This is the hybrid: modem from the wwan fork, the
 # entire NSS data plane from Julius.
+# Feeds we cherry-pick from rather than install wholesale:
+#   wwan       - the fork also carries the NSS core packages (see above).
+#   ddimension - a general-purpose feed (flashing tools, wpad variants, MQTT,
+#                home automation …); we only want the wwand stack. The single
+#                source package `wwand` builds wwand, wwand-qmi and the
+#                datapath add-ons including wwand-datapath-rmnet_nss.
 WWAN_PACKAGES="quectel-cm luci-proto-quectel kmod-rmnet-nss kmod-usb-net-qmi-wwan-quectel"
+DDIMENSION_PACKAGES="wwand luci-app-wwand luci-proto-wwand"
+
+feed_package_whitelist() {
+  case "$1" in
+    wwan) printf '%s' "$WWAN_PACKAGES" ;;
+    ddimension) printf '%s' "$DDIMENSION_PACKAGES" ;;
+  esac
+}
+
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   feed_name="$(awk '{print $2}' <<<"$line")"
-  if [[ "$feed_name" == "wwan" ]]; then
-    log::info "Installing modem packages only from feed: wwan ($WWAN_PACKAGES)"
+  whitelist="$(feed_package_whitelist "$feed_name")"
+  if [[ -n "$whitelist" ]]; then
+    log::info "Installing selected packages from feed: $feed_name ($whitelist)"
     # shellcheck disable=SC2086  # intentional word splitting of the package list
-    ./scripts/feeds install -p wwan $WWAN_PACKAGES
+    ./scripts/feeds install -p "$feed_name" $whitelist
     continue
   fi
   log::info "Installing packages from feed: $feed_name"

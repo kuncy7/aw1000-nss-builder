@@ -199,13 +199,26 @@ CONFIG_PACKAGE_kmod-qca-nss-drv-igs=y
 ## MAP-T API from "2b".
 CONFIG_PACKAGE_kmod-qca-nss-drv-map-t=y
 
-## ---- Modem 5G: RMNET przez NSS (wwan feed = qosmio nss-packages) ----
+## ---- Modem 5G: RMNET przez NSS (wwan feed = xhikarishii aw1000-nss) ----
 CONFIG_NSS_DRV_RMNET_ENABLE=y
 CONFIG_PACKAGE_kmod-rmnet-nss=y
 CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
 CONFIG_PACKAGE_kmod-usb-net-qmi-wwan-quectel=y
 CONFIG_PACKAGE_quectel-cm=y
 CONFIG_PACKAGE_luci-proto-quectel=y
+
+## wwand — alternative dialer, carried alongside quectel-cm for evaluation.
+## Not active by default: the two coexist and migration is user-triggered
+## (an interface only uses it once its proto is switched to 'wwand').
+## wwand-datapath-rmnet_nss is the piece that matters here — it adopts the
+## QMAP children the vendor qmi_wwan_q registers (wwan0_1…, mux id 0x81+)
+## instead of creating mainline rmnet ones, which is the only way a dialer
+## keeps our NSS offload. wwand-qmi pulls kmod-rmnet in as a dependency.
+CONFIG_PACKAGE_wwand=y
+CONFIG_PACKAGE_wwand-qmi=y
+CONFIG_PACKAGE_wwand-datapath-rmnet_nss=y
+CONFIG_PACKAGE_luci-app-wwand=y
+CONFIG_PACKAGE_luci-proto-wwand=y
 
 ## WireGuard
 CONFIG_PACKAGE_kmod-wireguard=y

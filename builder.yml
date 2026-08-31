@@ -49,6 +49,14 @@ feeds:
   # 6.18 ports — he does not touch quectel-qmi-wwan, rmnet-nss or mhi-pcie.
   - name: wwan
     url: https://github.com/xhikarishii/nss-packages.git;aw1000-nss
+  # wwand — event-driven QMI/MBIM/NCM connection manager (ucode). Carried for
+  # evaluation next to quectel-cm, which stays the default: the two coexist,
+  # migration is user-triggered. Its wwand-datapath-rmnet_nss add-on adopts the
+  # QMAP children the vendor qmi_wwan_q registers, which is the only way a
+  # dialer can keep our NSS offload — written by the author after we described
+  # the rmnet_nss_callbacks contract on the forum.
+  - name: ddimension
+    url: https://github.com/ddimension/openwrt-repo.git
   - name: qosmio
     url: https://github.com/qosmio/packages-extra
   - name: iceg_modemdata
