@@ -163,21 +163,6 @@ if [[ -e package/feeds/wwan/qca-mcs ]]; then
   exit 1
 fi
 
-# 2a-pre. DEBUG instrumentation for the AW1000 wifili reference run: copy the
-# qca-nss-drv trace patches (wifili tx-message trace, vdev data-frame trace,
-# N2H buffer trace) into the feed package so quilt applies them at build.
-# Pure instrumentation carried from the GL-B3000 investigation - no behaviour
-# change; drop this block together with package-patches/qca-nss-drv/ when the
-# reference run is done.
-if compgen -G "$BUILDER_REPO/package-patches/qca-nss-drv/*.patch" >/dev/null; then
-  drv_dir="feeds/nss/qca-nss-drv/patches"
-  mkdir -p "$drv_dir"
-  for p in "$BUILDER_REPO"/package-patches/qca-nss-drv/*.patch; do
-    log::info "Adding qca-nss-drv debug patch: $(basename "$p")"
-    cp "$p" "$drv_dir/"
-  done
-fi
-
 # 2a. Per-package post-install fixes for upstream incompatibilities.
 # The wwan packages live in feeds/nss_packages/wwan/ on the qosmio layout
 # (nss_packages IS the wwan repo there) and in feeds/wwan/wwan/ when the wwan

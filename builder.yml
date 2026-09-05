@@ -55,6 +55,12 @@ feeds:
   # QMAP children the vendor qmi_wwan_q registers, which is the only way a
   # dialer can keep our NSS offload — written by the author after we described
   # the rmnet_nss_callbacks contract on the forum.
+  #
+  # Unpinned on purpose, so a build picks up the author's fixes as they land.
+  # Our 2026-09-02 field report from this board (the parent renamed to its L3
+  # name before the datapath probe, so the children kept the kernel's stem and
+  # the box fell back to raw_ip on a QMAP parent) is fixed in wwand 87d7c9c,
+  # packaged as r59 — the first release this device can actually dial with.
   - name: ddimension
     url: https://github.com/ddimension/openwrt-repo.git
   - name: qosmio
