@@ -267,6 +267,29 @@ for mhi_dir in feeds/nss_packages/wwan/driver/quectel-mhi-pcie feeds/wwan/wwan/d
   fi
 done
 
+# 2a-quinque. wwand: pin the commit that carries the QMAP-version fix.
+# After our forum report #38 (2026-09-06) the author fixed three things in
+# ddimension/wwand 2a26903 ("rmnet_nss: take the QMAP header version from the
+# driver, not from a default"): the datapath now derives QMAP v5 from
+# qmap_size (31 KB = the sdx55 row = our RG500Q-EA), `option qmap_version`
+# warns when it cannot raise the ladder, and a negotiated QMAP format with no
+# `option mux_id` is a refusal instead of a dead link. The packaged r64 still
+# pins 6ddec23e, one commit BEFORE that fix. Move the pin forward so this
+# build can test it. Self-limiting: the edit only fires while the feed pins
+# exactly that pre-fix commit, so the author's next release bump makes this
+# block a no-op without any change here. The mirror hash is set to `skip`
+# because the tarball changes with the pin; the feed is unpinned by design.
+wwand_mk="feeds/ddimension/wwand/Makefile"
+wwand_prefix="6ddec23e3ea9c6c6bbe1cd5feef207972137d840"
+wwand_fix="2a269031000d9131af49422472f809d28c4821ef"
+if [[ -f "$wwand_mk" ]] && grep -q "^PKG_SOURCE_VERSION:=$wwand_prefix\$" "$wwand_mk"; then
+  log::info "wwand: feed pins pre-fix $wwand_prefix; moving to $wwand_fix (QMAP-version fix)"
+  sed -i "s/^PKG_SOURCE_VERSION:=$wwand_prefix\$/PKG_SOURCE_VERSION:=$wwand_fix/" "$wwand_mk"
+  sed -i 's/^PKG_MIRROR_HASH:=.*$/PKG_MIRROR_HASH:=skip/' "$wwand_mk"
+  pkg_release_bump "$wwand_mk"
+  grep -q "^PKG_SOURCE_VERSION:=$wwand_fix\$" "$wwand_mk" || { log::error "wwand pin override did not apply"; exit 1; }
+fi
+
 # 2b. nat46 + qca-nss-ecm MAP-T — NOW UPSTREAM IN THE EDMA TREE (no longer injected).
 # Our fix was merged into JuliusBairaktaris/openwrt-nss-edma (commit b8a0af308e,
 # "nat46: stage headers and add QCA MAP-T exports for ECM offload"): the tree's
