@@ -280,19 +280,21 @@ done
 # patches/010-nat46-pkg-extmod-subdirs-6.18.patch was dropped: re-applying it
 # would fail `git apply` and abort section 1.
 
-# 2b-bis. qca-nss-ecm: enable the RAWIP interface type for our modem driver.
-# rmnet netdevs are ARPHRD_RAWIP; without ECM_INTERFACE_RAWIP_ENABLE the ECM
-# cannot build the interface hierarchy down to rmnet and modem flows are never
-# accelerated (they still forward, just on the CPU). Upstream first gated the
-# flag on CONFIG_PACKAGE_kmod-qmi_wwan_q (the QModem driver name, never ours),
-# then removed RAWIP altogether in "force off the interface types we do not
-# validate" (0df7134) — Julius has no cellular hardware; we validated rmnet
-# offload on the AW1000 in June. Append the flag as our own block instead of
-# editing his lines: make expands ECM_MAKE_OPTS when the compile recipe runs,
-# so an appended += anywhere in the Makefile works and survives upstream
-# refactors. Idempotent.
-# (RAWIP requirement confirmed independently by divinecougar/ozgunokan's
-# QModem-NSS AW1000 build, which force-enables the same flag in ECM source.)
+# 2b-bis. qca-nss-ecm: RAWIP interface type — NOW UPSTREAM, this is a tripwire.
+# History: upstream first gated the flag on CONFIG_PACKAGE_kmod-qmi_wwan_q (the
+# QModem driver name, never ours), then removed RAWIP altogether in "force off
+# the interface types we do not validate" (0df7134), so we appended it
+# ourselves. As of nss-packages 0ac177b ("qca-nss-ecm: classify a header-less
+# modem as raw IP") Julius sets it himself and gates it properly — on
+# NSS_DRV_RMNET_ENABLE and on the firmware line, because 11.4 has no raw-IP
+# valid flag in the rule ABI and will not compile with the type enabled.
+#
+# So this block no longer fires: the grep finds his line and we skip. It is
+# kept as a self-healing fallback — if the flag ever disappears from the
+# Makefile again, we re-add it rather than silently losing modem acceleration.
+# Note the grep matches the string anywhere in the file, including inside his
+# make conditionals, which is what we want: when his gate deliberately excludes
+# a configuration (11.4), skipping is the correct outcome, not a regression.
 ecm_mk="feeds/nss/qca-nss-ecm/Makefile"
 if [[ -f "$ecm_mk" ]] && ! grep -q 'ECM_INTERFACE_RAWIP_ENABLE=y' "$ecm_mk"; then
   log::info "Enabling ECM RAWIP interface support (rmnet offload)"
