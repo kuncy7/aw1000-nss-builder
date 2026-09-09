@@ -4,10 +4,10 @@
 # NSS bring-up is NOT done here anymore (Julius-philosophy boot model):
 # the nss-tools package ships /etc/init.d/nss (START=99) which arms the
 # data plane and does the ath11k nss_offload flip + radio rebind + pbuf.
-# Toggle: uci set nss.general.enabled='0'. The modem dials via netifd
-# (proto quectel, AT+CFUN=1 inside the patched quectel-cm); rmnet attaches
-# to NSS via the deferred-attach patch. /usr/sbin/modem-up remains as a
-# manual recovery tool only.
+# Toggle: uci set nss.general.enabled='0'. The modem dials via netifd —
+# proto wwand since 2026-09-09 (see /etc/config/network, PROFIL A); rmnet
+# attaches to NSS via the deferred-attach patch either way. quectel-cm and
+# /usr/sbin/modem-up stay in the image as the manual recovery route.
 
 # ssh moduli hardening (drop weak DH groups).
 [ -f /etc/ssh/moduli ] && {

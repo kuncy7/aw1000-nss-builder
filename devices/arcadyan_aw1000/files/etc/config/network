@@ -18,15 +18,48 @@ config interface 'lan'
 	list ipaddr '192.168.21.1/24'
 	option ip6assign '60'
 
-# === PROFIL A: IPv4-only (aktywny, domyslny) ===============================
-# Bezpieczny, znany, utrzymuje lacznosc. Zaden ResetFactory niepotrzebny.
-config interface 'wan'
-	option proto 'quectel'
+# === PROFIL A: wwand + QMAP v5 + NSS (aktywny, domyslny) ==================
+# Zwalidowane na HW 2026-09-09: `rmnet_nss - QMAP v5`, ping 5/5,
+# ECM ipv4 accelerated_count 25/29 przy 5 klientach WiFi. Czyli wwand dialuje
+# I zachowuje offload NSS - to jedyny powod, dla ktorego vendorowa sciezka
+# QMAP w ogole tu jest.
+#
+# Wymagane trzy rzeczy i kazda ma swoja historie (szczegoly:
+# /home/stacho/moje/AW1000/wwand-migracja.md, pulapki 6/10/11):
+#   * `netdev wwan0` w sekcji modemu - vendorowy netdev danych, NIE l3.
+#   * `mux_id 1` na interfejsie - bez niego lista kanalow jest pusta i
+#     datapath degraduje sie do raw-IP na rodzicu, ktory jest w ramkowaniu
+#     QMAP, wiec nie przejdzie ani jeden pakiet. Od wwand r65 to blad, nie
+#     cicha degradacja.
+#   * BRAK `qmap_version` - datapath wyprowadza v5 sam z `qmap_size`
+#     (31744 = 31 KB = wiersz sdx55 w tablicy qmi_wwan_q). Recznie ustawiona
+#     wartosc i tak nie podniesie drabiny, ktora deklaruje datapath.
+#
+# Wymaga wwand >= r65 (commit 2a26903). Starsze wersje: patrz PROFIL A-legacy.
+config wwand_modem 'm0'
 	option device '/dev/cdc-wdm0'
-	option pdptype 'ipv4'
+	option netdev 'wwan0'
+	option mux 'rmnet_nss'
+
+config interface 'wan'
+	option proto 'wwand'
+	option modem 'm0'
 	option apn 'internet'
+	option pdp_type 'ipv4'
 	option auth 'none'
-	option delay '15'
+	option mux_id '1'
+
+# === PROFIL A-legacy: quectel-cm (droga odwrotu) ===========================
+# quectel-cm zostaje w obrazie. Zeby wrocic: zakomentowac PROFIL A powyzej,
+# odkomentowac ponizsze, `/etc/init.d/wwand reload && /etc/init.d/network restart`.
+#
+# config interface 'wan'
+# 	option proto 'quectel'
+# 	option device '/dev/cdc-wdm0'
+# 	option pdptype 'ipv4'
+# 	option apn 'internet'
+# 	option auth 'none'
+# 	option delay '15'
 
 # === PROFIL B: IPv6-only + native 464xlat (Orange PL) ======================
 # Validated on AW1000 (RG500Q-EA / Orange PL). No ResetFactory needed: the
