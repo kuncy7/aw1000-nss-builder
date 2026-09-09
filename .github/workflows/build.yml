@@ -1,21 +1,29 @@
 name: Build
 
 # All build/release/cleanup behavior reads its configuration from builder.yml.
-# The cron schedule below is the only knob that cannot be expressed there
-# (GitHub Actions cron values must be static strings in this file).
+#
+# AUTOMATIC BUILDS ARE OFF (2026-09-09, on request). This branch produces the
+# qosmio-based production images, and the AW1000 has moved to the EDMA-NSS
+# image built from `test-edma-nss`, so the 8-hourly schedule was burning CI
+# time on a target nobody flashes any more. `workflow_dispatch` still works:
+# build main by hand whenever it is actually wanted.
+#
+# To turn them back on, uncomment the two blocks below. The cron value has to
+# be a static string in this file — it is the one knob builder.yml cannot
+# express.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - builder.yml
-      - 'devices/**'
-      - 'common/**'
-      - 'patches/**'
-      - 'scripts/**'
-      - '.github/workflows/build.yml'
-  schedule:
-    - cron: "0 */8 * * *"
+# push:
+#   branches: [main]
+#   paths:
+#     - builder.yml
+#     - 'devices/**'
+#     - 'common/**'
+#     - 'patches/**'
+#     - 'scripts/**'
+#     - '.github/workflows/build.yml'
+# schedule:
+#   - cron: "0 */8 * * *"
 
 concurrency:
   group: build-${{ github.ref }}
