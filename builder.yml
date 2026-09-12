@@ -57,10 +57,15 @@ feeds:
   # the rmnet_nss_callbacks contract on the forum.
   #
   # Unpinned on purpose, so a build picks up the author's fixes as they land.
-  # Our 2026-09-02 field report from this board (the parent renamed to its L3
-  # name before the datapath probe, so the children kept the kernel's stem and
-  # the box fell back to raw_ip on a QMAP parent) is fixed in wwand 87d7c9c,
-  # packaged as r59 — the first release this device can actually dial with.
+  # Three field reports from this board went in this way: the parent renamed
+  # before the datapath probe (87d7c9c, r59), the ifup race (same commit), and
+  # the QMAP header version — the driver is v5 and the datapath declared plain,
+  # so frames left the host and the modem discarded them (2a26903, r65). r65 is
+  # the first release this device both dials and offloads with.
+  #
+  # The feed has had two channels since 2026-09-11. We track the default branch,
+  # which is `main` — that is deliberate: `stable` would not carry the RMNET_INFO
+  # ioctl helper (78e295b) that ddimension/wwand#20 asks this board to verify.
   - name: ddimension
     url: https://github.com/ddimension/openwrt-repo.git
   - name: qosmio
