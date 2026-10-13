@@ -161,7 +161,10 @@ CONFIG_NSS_DRV_WIFI_EXT_VDEV_ENABLE=y
 ## ath11k NSS Wi-Fi offload support compiled in; the radios boot host-mode and
 ## the nss service (nss-tools) flips nss_offload + rebinds them at START=99.
 CONFIG_ATH11K_NSS_SUPPORT=y
-CONFIG_ATH11K_NSS_MESH_SUPPORT=y
+## 802.11s mesh offload stays off on this branch: the maintained tree has
+## never built or run the mesh patches (its IPQ5018 images do not enable
+## them), and this router does not mesh. Back on once mesh works there.
+# CONFIG_ATH11K_NSS_MESH_SUPPORT is not set
 CONFIG_PACKAGE_MAC80211_NSS_SUPPORT=y
 
 ## Julius arming + QoS stack (turnkey boot, GUI control). nss-tools ships
