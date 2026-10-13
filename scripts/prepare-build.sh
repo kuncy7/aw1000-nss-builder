@@ -76,6 +76,20 @@ done <<<"$FEEDS_LINES"
 log::info "Updating all feeds"
 ./scripts/feeds update -a
 
+# The archived feed downloads its four source archives from a release in
+# Julius' repository. kuncy7/nss-packages carries a byte-for-byte copy of that
+# release (same file names, PKG_HASH unchanged), so read them from there: the
+# build then needs nothing from a repository that is no longer maintained.
+# Does nothing on a feed branch that already points at the copy.
+nss_src_old='github.com/JuliusBairaktaris/nss-packages/releases/download/nss-source-tarballs'
+nss_src_new='github.com/kuncy7/nss-packages/releases/download/nss-source-tarballs'
+for mk in feeds/nss/*/Makefile; do
+  if grep -q "$nss_src_old" "$mk"; then
+    log::info "Source archives from the kuncy7 copy: $mk"
+    sed -i "s|$nss_src_old|$nss_src_new|" "$mk"
+  fi
+done
+
 # Install each custom feed individually so failures are obvious.
 #
 # Exception: the `wwan` feed (a fork of qosmio/nss-packages, see builder.yml)

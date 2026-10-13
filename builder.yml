@@ -12,14 +12,20 @@
 # Do not merge to main.
 
 # Upstream OpenWrt source (the tree that will be checked out and built).
+#
+# Julius archived the EDMA-NSS line on 2026-10-11 (his project became PPE-NSS,
+# which has no rmnet path to the NSS and so is no use to this board's modem).
+# The tree and the feed are therefore read from our own copies of his final
+# branches, kept in kuncy7/openwrt-nss-edma and kuncy7/nss-packages under
+# julius-archive/. Same commits, an address that does not go away.
 upstream:
-  repo: JuliusBairaktaris/openwrt-nss-edma
-  branch: nss-edma-rework
+  repo: kuncy7/openwrt-nss-edma
+  branch: julius-archive/nss-edma-rework
 
 # NSS packages source. Tracked separately so we can detect package-only updates.
 nss_packages:
-  repo: JuliusBairaktaris/nss-packages
-  branch: edma-nss
+  repo: kuncy7/nss-packages
+  branch: julius-archive/edma-nss
 
 # Device id. Must match a directory under devices/<id>/ containing
 #   - config        (the OpenWrt .config file)
@@ -38,7 +44,7 @@ device: arcadyan_aw1000
 # Each entry becomes:  src-git <name> <url>
 feeds:
   - name: nss
-    url: https://github.com/JuliusBairaktaris/nss-packages.git;edma-nss
+    url: https://github.com/kuncy7/nss-packages.git;julius-archive/edma-nss
   # Modem packages. xhikarishii's aw1000-nss branch forks qosmio's wwan branch
   # at the exact commit we used to pin (af86012) and adds the cellular work
   # qosmio has not merged yet (PR qosmio/nss-packages#75, still open): split /
