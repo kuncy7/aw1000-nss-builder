@@ -64,11 +64,21 @@ if [[ -n "${NSS_BRANCH:-}" ]]; then
   sed -i "s|nss-packages\.git;[^ ]*|nss-packages.git;${NSS_BRANCH}|" feeds.conf
 fi
 
-log::info "Appending custom feeds:"
+# A feed the tree's own feeds.conf.default already names is replaced in place,
+# not appended: scripts/feeds dies on a duplicate feed name, and the entry from
+# builder.yml is the one that has to win.
+log::info "Adding custom feeds:"
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
-  log::info "  $line"
-  echo "$line" >>feeds.conf
+  feed_name="$(awk '{print $2}' <<<"$line")"
+  if grep -qE "^src-[a-z-]+[[:space:]]+${feed_name}[[:space:]]" feeds.conf; then
+    log::info "  $line  (replaces the tree's entry)"
+    awk -v n="$feed_name" -v l="$line" '$1 ~ /^src-/ && $2 == n { print l; next } { print }' feeds.conf >feeds.conf.new
+    mv feeds.conf.new feeds.conf
+  else
+    log::info "  $line"
+    echo "$line" >>feeds.conf
+  fi
 done <<<"$FEEDS_LINES"
 
 # Update ALL feeds first so standard feeds (luci, packages, …) are available

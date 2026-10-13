@@ -1,6 +1,11 @@
 # Qualcommax NSS Builder — fork configuration.
 #
-# *** EXPERIMENTAL BRANCH: test-edma-nss ***
+# *** EXPERIMENTAL BRANCH: test-kuncy-nss (branched from test-edma-nss) ***
+# Same image, built from the MAINTAINED line instead of the archived one:
+# kuncy7/openwrt-nss-edma c3po-tag-8021q + kuncy7/nss-packages ipq50xx-rebase.
+# That branch carries the IPQ5018 work on top of Julius' EDMA-NSS tree and is
+# kept current with OpenWrt main; nothing there had built or run an IPQ807x
+# image before this branch. The description below is the one of test-edma-nss.
 # Full AW1000 build (package parity with the qosmio production build on main)
 # against Julius Bairaktaris' EDMA-NSS rework: NSS hardware offload running on
 # OpenWrt main's upstream qca-edma/qca-ppe drivers instead of the vendor
@@ -20,12 +25,12 @@
 # julius-archive/. Same commits, an address that does not go away.
 upstream:
   repo: kuncy7/openwrt-nss-edma
-  branch: julius-archive/nss-edma-rework
+  branch: c3po-tag-8021q
 
 # NSS packages source. Tracked separately so we can detect package-only updates.
 nss_packages:
   repo: kuncy7/nss-packages
-  branch: julius-archive/edma-nss
+  branch: ipq50xx-rebase
 
 # Device id. Must match a directory under devices/<id>/ containing
 #   - config        (the OpenWrt .config file)
@@ -44,7 +49,7 @@ device: arcadyan_aw1000
 # Each entry becomes:  src-git <name> <url>
 feeds:
   - name: nss
-    url: https://github.com/kuncy7/nss-packages.git;julius-archive/edma-nss
+    url: https://github.com/kuncy7/nss-packages.git;ipq50xx-rebase
   # Modem packages. xhikarishii's aw1000-nss branch forks qosmio's wwan branch
   # at the exact commit we used to pin (af86012) and adds the cellular work
   # qosmio has not merged yet (PR qosmio/nss-packages#75, still open): split /
@@ -101,6 +106,9 @@ feeds:
 
 # Release publishing settings.
 release:
-  prefix: aw1000-edma-test       # tag = <prefix>-<UTC timestamp>-<run id>
-  keep: 3                        # number of newest releases to retain (older ones are deleted)
+  prefix: aw1000-kuncy-test      # tag = <prefix>-<UTC timestamp>-<run id>
+  # The prune step counts every release of the repository, whatever its prefix.
+  # Three would let a build from this branch delete the aw1000-edma-test
+  # reference images, so keep enough for both sets.
+  keep: 10                       # number of newest releases to retain (older ones are deleted)
   artifact_retention_days: 7     # how long the GitHub Actions artifact (separate from the release) is kept
