@@ -22,10 +22,10 @@
 # rc.local only keeps ssh-moduli hardening + the RAM-boot Wi-Fi fallback.
 #
 # Parity notes vs qosmio (updated 2026-07-03):
-#   - bridge-mgr + qca-mcs now EXIST on the Julius tree (QSDK 14.0) and are
-#     enabled below. qca-mcs must resolve from the nss feed, not wwan (the
-#     wwan feed carries a stale 12.5 copy that fails on 6.18) — guarded in
-#     prepare-build.sh.
+#   - bridge-mgr EXISTS on the Julius tree (QSDK 14.0) and is enabled below.
+#     qca-mcs is gone from the nss feed again (ECM reads the multicast bridge
+#     ports from the bridge MDB); the wwan feed's stale 12.5 copy is removed
+#     in prepare-build.sh so that nothing can select it.
 #   - kmod-nat46 + 464xlat: ENABLED. nat46 MAP-T export API is upstream in the
 #     Julius tree; kmod-qca-nss-drv-map-t (the NSS MAP-T connmgr) is injected
 #     into qca-nss-clients (prepare-build.sh "2c"). NSS-offloaded CLAT — the
@@ -167,15 +167,14 @@ CONFIG_PACKAGE_MAC80211_NSS_SUPPORT=y
 ## Julius arming + QoS stack (turnkey boot, GUI control). nss-tools ships
 ## /etc/init.d/nss + /usr/sbin/nss-up (fw arm, bridge/wifi offload, core
 ## pinning); nssqos = DSCP marking / NSS fast-lane; LuCI apps for both.
-## nss-tools hard-depends on kmod-qca-mcs (multicast snooping, QSDK 14.0).
 CONFIG_PACKAGE_nss-tools=y
 CONFIG_PACKAGE_nssqos=y
 CONFIG_PACKAGE_luci-app-nss=y
 CONFIG_PACKAGE_luci-app-nssqos=y
 
-## Bridge offload (nss-bridge-mgr, first enabled 2026-07-03) + multicast.
+## Bridge offload (nss-bridge-mgr, first enabled 2026-07-03). Multicast needs
+## no package of its own: ECM follows the bridge MDB.
 CONFIG_PACKAGE_kmod-qca-nss-drv-bridge-mgr=y
-CONFIG_PACKAGE_kmod-qca-mcs=y
 
 ## Diagnostics connection managers, matching the defaults of Julius' own
 ## Qualcommax_NSS_Builder images: netlink exports the NSS state consumed by

@@ -178,14 +178,13 @@ if [[ ! -e package/feeds/nss/nss-userspace-oss ]]; then
   exit 1
 fi
 
-# Guard: qca-mcs is the one package duplicated between the nss feed (QSDK 14.0,
-# kernel-6.18-ready) and the wwan feed (stale 12.5 copy that fails on 6.18 with
-# implicit try_to_del_timer_sync). nss-tools hard-depends on kmod-qca-mcs, so a
-# wrong resolution bricks the build an hour in — fail fast here instead.
-if [[ -e package/feeds/wwan/qca-mcs ]]; then
-  log::error "qca-mcs resolved from the wwan feed (stale 12.5); expected the nss feed"
-  exit 1
-fi
+# qca-mcs. The nss feed carried it for a while (QSDK 14.0) and then dropped it:
+# ECM reads the multicast bridge ports from the bridge MDB now, and nss-tools
+# no longer depends on kmod-qca-mcs. With none in the nss feed, `feeds install
+# -a` falls back to the wwan fork's 12.5 copy, which does not build on 6.18
+# (implicit try_to_del_timer_sync). Nothing may select that copy, so take it
+# out. On a feed that still ships its own qca-mcs this does nothing.
+repoint_from_wwan qca-mcs drop
 
 # 2a. Per-package post-install fixes for upstream incompatibilities.
 # The wwan packages live in feeds/nss_packages/wwan/ on the qosmio layout
