@@ -161,6 +161,12 @@ CONFIG_NSS_DRV_WIFI_EXT_VDEV_ENABLE=y
 ## ath11k NSS Wi-Fi offload support compiled in; the radios boot host-mode and
 ## the nss service (nss-tools) flips nss_offload + rebinds them at START=99.
 CONFIG_ATH11K_NSS_SUPPORT=y
+
+## Radio firmware WLAN.HK.2.12-01460, as on the qosmio production image,
+## instead of the 2.9.0.1 the target pulls from linux-firmware. The tree
+## packages it separately and the two conflict, so the default goes off.
+# CONFIG_PACKAGE_ath11k-firmware-ipq8074 is not set
+CONFIG_PACKAGE_ath11k-firmware-ipq8074-2.12=y
 ## 802.11s mesh offload stays off on this branch: the maintained tree has
 ## never built or run the mesh patches (its IPQ5018 images do not enable
 ## them), and this router does not mesh. Back on once mesh works there.
